@@ -60,6 +60,20 @@ To run the scraper once:
 python -m src.main scrape
 ```
 
+### Running Sentiment Analysis
+
+To run sentiment analysis for the current week:
+
+```
+python -m src.main analyze
+```
+
+To run sentiment analysis for a specific week:
+
+```
+python -m src.main analyze --week-start 2024-01-08 --week-end 2024-01-14
+```
+
 ### Running the Scheduler
 
 To run the scraper on a schedule (as defined in the .env file):
@@ -75,6 +89,33 @@ To check the health of the application:
 ```
 python -m src.main health
 ```
+
+## Sentiment Analysis
+
+The sentiment analysis engine processes economic indicators to determine currency sentiment:
+
+### Sentiment Calculation Logic
+
+1. **Individual Event Analysis**: For each economic event, compares forecast vs previous values:
+   - If `Forecast > Previous + threshold` → **Bullish** (+1)
+   - If `Forecast < Previous - threshold` → **Bearish** (-1)
+   - If `|Forecast - Previous| ≤ threshold` → **Neutral** (0)
+
+2. **Currency-Level Conflict Resolution**: When multiple events exist for a currency:
+   - **Majority Rules**: If one sentiment type has more events, it wins
+   - **Tie Resolution**: If tied, defaults to "Bearish with Consolidation" or "Bullish with Consolidation"
+   - **Missing Data**: Events with missing forecast/previous values are marked as neutral
+
+3. **Data Persistence**: Final sentiments are stored in the `sentiments` table with:
+   - Currency code
+   - Week start/end dates
+   - Final sentiment label
+   - Detailed JSON with all event analysis
+   - Computation timestamp
+
+### Sentiment Threshold
+
+The `SENTIMENT_THRESHOLD` environment variable controls the minimum difference required to trigger bullish/bearish sentiment. Default is 0.0, meaning any positive/negative change triggers sentiment.
 
 ## Development
 
@@ -96,6 +137,7 @@ Run tests for a specific module:
 
 ```
 python run_tests.py --module scraper
+python run_tests.py --module analysis
 ```
 
 Generate HTML coverage report:

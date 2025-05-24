@@ -7,10 +7,12 @@ import argparse
 import logging
 import time
 import signal
+from datetime import datetime
 from dotenv import load_dotenv
 
 from src.scheduler import schedule_scraper, start_scheduler
 from src.run_scraper import run_scraper
+from src.run_analysis import run_analysis, parse_date
 from src.health_check import run_health_check
 from src.utils.logging import get_logger
 
@@ -34,6 +36,12 @@ def parse_args():
     # Scraper command
     scraper_parser = subparsers.add_parser("scrape", help="Run the scraper once")
     scraper_parser.add_argument("--force", action="store_true", help="Force scraper to run regardless of schedule")
+    
+    # Analysis command
+    analysis_parser = subparsers.add_parser("analyze", help="Run sentiment analysis")
+    analysis_parser.add_argument("--week-start", type=parse_date, help="Start date of the week to analyze (YYYY-MM-DD)")
+    analysis_parser.add_argument("--week-end", type=parse_date, help="End date of the week to analyze (YYYY-MM-DD)")
+    analysis_parser.add_argument("--current-week", action="store_true", help="Analyze the current week (default)")
     
     # Scheduler command
     scheduler_parser = subparsers.add_parser("schedule", help="Run the scraper on a schedule")
@@ -72,6 +80,19 @@ def main():
     if args.command == "scrape":
         logger.info("Running scraper...")
         return run_scraper()
+    elif args.command == "analyze":
+        logger.info("Running sentiment analysis...")
+        week_start = None
+        week_end = None
+        
+        if args.week_start and args.week_end:
+            week_start = args.week_start
+            week_end = args.week_end
+        elif args.week_start or args.week_end:
+            logger.error("Both --week-start and --week-end must be provided together")
+            return 1
+            
+        return run_analysis(week_start, week_end)
     elif args.command == "schedule":
         logger.info("Starting scheduler...")
         start_scheduler()

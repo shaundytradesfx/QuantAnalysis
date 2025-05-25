@@ -1,0 +1,403 @@
+"""
+Discord notification module for sending weekly sentiment reports.
+
+This module handles:
+- Message formatting with Markdown support
+- Discord webhook integration
+- Error handling and retry logic
+- Health check notifications
+"""
+import os
+import json
+import time
+import logging
+from typing import Dict, Any, Optional
+from datetime import datetime
+from functools import wraps
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+def timing_decorator(func):
+    """
+    Simple timing decorator for Discord notifier methods.
+    
+    Args:
+        func: The function to measure.
+        
+    Returns:
+        function: The wrapped function.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        execution_time = end_time - start_time
+        logger.info(f"Function {func.__name__} executed in {execution_time:.2f} seconds")
+        return result
+    return wrapper
+
+class DiscordNotifier:
+    """
+    Handles Discord webhook notifications for sentiment analysis reports.
+    """
+    
+    def __init__(self, webhook_url: str = None, health_webhook_url: str = None):
+        """
+        Initialize Discord notifier.
+        
+        Args:
+            webhook_url (str, optional): Discord webhook URL for reports
+            health_webhook_url (str, optional): Discord webhook URL for health alerts
+        """
+        self.webhook_url = webhook_url or os.getenv("DISCORD_WEBHOOK_URL")
+        self.health_webhook_url = health_webhook_url or os.getenv("DISCORD_HEALTH_WEBHOOK_URL")
+        
+        if not self.webhook_url:
+            logger.warning("No Discord webhook URL configured")
+        
+        # Configure HTTP session with retries
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            status_forcelist=[429, 500, 502, 503, 504],
+            method_whitelist=["HEAD", "GET", "OPTIONS", "POST"],
+            backoff_factor=1
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        
+        # Currency priority order for display
+        self.currency_priority = ["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF"]
+    
+    def format_weekly_report(self, currency_sentiments: Dict[str, Any], week_start: datetime) -> str:
+        """
+        Format the weekly sentiment analysis into a Discord-friendly message.
+        
+        Args:
+            currency_sentiments (Dict[str, Any]): Sentiment analysis results by currency
+            week_start (datetime): Start date of the analysis week
+            
+        Returns:
+            str: Formatted Discord message with Markdown
+        """
+        if not currency_sentiments:
+            return self._format_empty_report(week_start)
+        
+        # Build message sections
+        header = f"**📊 Economic Directional Analysis: Week of {week_start.strftime('%B %d, %Y')}**\n\n"
+        
+        # Sort currencies by priority
+        sorted_currencies = self._sort_currencies_by_priority(list(currency_sentiments.keys()))
+        
+        # Currency sections
+        currency_sections = []
+        net_summary = []
+        
+        for currency in sorted_currencies:
+            sentiment_data = currency_sentiments[currency]
+            section, summary = self._format_currency_section(currency, sentiment_data)
+            currency_sections.append(section)
+            net_summary.append(summary)
+        
+        # Build complete message
+        message_parts = [
+            header,
+            "\n".join(currency_sections),
+            "\n**📈 Net Summary:**",
+            "\n".join([f"• {item}" for item in net_summary]),
+            f"\n\n_Generated automatically by EconSentimentBot. Next run: {self._get_next_monday(week_start).strftime('%B %d, %Y')} at 06:00 UTC_"
+        ]
+        
+        return "\n".join(message_parts)
+    
+    def _format_currency_section(self, currency: str, sentiment_data: Dict[str, Any]) -> tuple:
+        """
+        Format a single currency's sentiment section.
+        
+        Args:
+            currency (str): Currency code
+            sentiment_data (Dict[str, Any]): Sentiment analysis data
+            
+        Returns:
+            tuple: (formatted_section, summary_line)
+        """
+        events = sentiment_data.get("events", [])
+        resolution = sentiment_data.get("resolution", {})
+        
+        # Currency header with flag emoji
+        flag_emoji = self._get_flag_emoji(currency)
+        section_header = f"**{flag_emoji} {currency}**"
+        
+        # Event details
+        event_lines = []
+        for i, event in enumerate(events, 1):
+            if event.get("data_available", True):
+                prev = event.get("previous", "N/A")
+                forecast = event.get("forecast", "N/A")
+                sentiment_label = event.get("sentiment_label", "Neutral")
+                event_name = event.get("event_name", "Unknown Event")
+                
+                # Format numeric values
+                prev_str = f"{prev:.2f}" if isinstance(prev, (int, float)) else str(prev)
+                forecast_str = f"{forecast:.2f}" if isinstance(forecast, (int, float)) else str(forecast)
+                
+                # Sentiment emoji
+                sentiment_emoji = self._get_sentiment_emoji(sentiment_label)
+                
+                event_lines.append(
+                    f"{i}. {event_name}: Prev={prev_str}, Forecast={forecast_str} → {sentiment_emoji} {sentiment_label}"
+                )
+            else:
+                event_name = event.get("event_name", "Unknown Event")
+                event_lines.append(f"{i}. {event_name}: Data Unavailable → ⚪ Neutral")
+        
+        # Overall assessment
+        final_sentiment = resolution.get("final_sentiment", "Neutral")
+        reason = resolution.get("reason", "No events analyzed")
+        sentiment_emoji = self._get_sentiment_emoji(final_sentiment)
+        
+        narrative = self._generate_narrative(currency, final_sentiment, len(events))
+        overall_line = f"**Overall**: {sentiment_emoji} {final_sentiment} – {narrative}"
+        
+        # Combine section
+        section = "\n".join([section_header] + event_lines + [overall_line, ""])
+        
+        # Summary for net section
+        summary = f"{currency}: {final_sentiment}"
+        
+        return section, summary
+    
+    def _format_empty_report(self, week_start: datetime) -> str:
+        """Format message when no sentiment data is available."""
+        return f"""**📊 Economic Directional Analysis: Week of {week_start.strftime('%B %d, %Y')}**
+
+⚠️ **No high-impact economic events found for this week.**
+
+This could indicate:
+• Light economic calendar
+• Data collection issues
+• System maintenance
+
+_Generated automatically by EconSentimentBot. Next run: {self._get_next_monday(week_start).strftime('%B %d, %Y')} at 06:00 UTC_"""
+    
+    def _sort_currencies_by_priority(self, currencies: list) -> list:
+        """Sort currencies by predefined priority order."""
+        sorted_currencies = []
+        
+        # Add currencies in priority order
+        for priority_currency in self.currency_priority:
+            if priority_currency in currencies:
+                sorted_currencies.append(priority_currency)
+        
+        # Add any remaining currencies alphabetically
+        remaining = sorted([c for c in currencies if c not in sorted_currencies])
+        sorted_currencies.extend(remaining)
+        
+        return sorted_currencies
+    
+    def _get_flag_emoji(self, currency: str) -> str:
+        """Get flag emoji for currency."""
+        flag_map = {
+            "USD": "🇺🇸", "EUR": "🇪🇺", "GBP": "🇬🇧", "JPY": "🇯🇵",
+            "AUD": "🇦🇺", "NZD": "🇳🇿", "CAD": "🇨🇦", "CHF": "🇨🇭"
+        }
+        return flag_map.get(currency, "🏳️")
+    
+    def _get_sentiment_emoji(self, sentiment: str) -> str:
+        """Get emoji for sentiment."""
+        if "Bullish" in sentiment:
+            return "🟢"
+        elif "Bearish" in sentiment:
+            return "🔴"
+        else:
+            return "⚪"
+    
+    def _generate_narrative(self, currency: str, sentiment: str, event_count: int) -> str:
+        """Generate narrative description for currency sentiment."""
+        if "Bullish" in sentiment:
+            if "Consolidation" in sentiment:
+                return f"Mixed signals with bullish lean suggest cautious optimism for {currency}-related assets"
+            else:
+                return f"Positive economic indicators suggest upside potential for {currency} & related assets"
+        elif "Bearish" in sentiment:
+            if "Consolidation" in sentiment:
+                return f"Mixed signals with bearish lean suggest cautious pessimism for {currency}-related assets"
+            else:
+                return f"Negative economic indicators suggest downside pressure for {currency} & related assets"
+        else:
+            return f"Neutral signals suggest sideways movement for {currency} in the near term"
+    
+    def _get_next_monday(self, current_week_start: datetime) -> datetime:
+        """Get the next Monday date."""
+        from datetime import timedelta
+        return current_week_start + timedelta(days=7)
+    
+    @timing_decorator
+    def send_weekly_report(self, currency_sentiments: Dict[str, Any], week_start: datetime) -> bool:
+        """
+        Send weekly sentiment report to Discord.
+        
+        Args:
+            currency_sentiments (Dict[str, Any]): Sentiment analysis results
+            week_start (datetime): Start date of analysis week
+            
+        Returns:
+            bool: True if sent successfully, False otherwise
+        """
+        if not self.webhook_url:
+            logger.error("No Discord webhook URL configured for weekly reports")
+            return False
+        
+        try:
+            # Format message
+            message = self.format_weekly_report(currency_sentiments, week_start)
+            
+            # Prepare Discord payload
+            payload = {
+                "content": message,
+                "username": "EconSentimentBot",
+                "avatar_url": "https://images.emojiterra.com/twitter/v14.0/512px/1f4ca.png"
+            }
+            
+            # Send to Discord
+            logger.info(f"Sending weekly report to Discord for week of {week_start.strftime('%Y-%m-%d')}")
+            response = self.session.post(
+                self.webhook_url,
+                json=payload,
+                timeout=30,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 204:
+                logger.info("Weekly report sent successfully to Discord")
+                return True
+            else:
+                logger.error(f"Failed to send Discord message: {response.status_code} - {response.text}")
+                
+                # Try sending health alert
+                self._send_health_alert(
+                    "Weekly Report Send Failed",
+                    f"HTTP {response.status_code}: {response.text[:500]}"
+                )
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error sending Discord message: {str(e)}")
+            self._send_health_alert("Weekly Report Network Error", str(e))
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending Discord message: {str(e)}")
+            self._send_health_alert("Weekly Report Unexpected Error", str(e))
+            return False
+    
+    def send_health_alert(self, title: str, message: str, severity: str = "ERROR") -> bool:
+        """
+        Send health check alert to Discord.
+        
+        Args:
+            title (str): Alert title
+            message (str): Alert message
+            severity (str): Severity level (ERROR, WARNING, INFO)
+            
+        Returns:
+            bool: True if sent successfully, False otherwise
+        """
+        return self._send_health_alert(title, message, severity)
+    
+    def _send_health_alert(self, title: str, message: str, severity: str = "ERROR") -> bool:
+        """Internal method to send health alerts."""
+        if not self.health_webhook_url:
+            logger.warning("No health webhook URL configured for alerts")
+            return False
+        
+        try:
+            # Severity emoji
+            severity_emoji = {
+                "ERROR": "🚨",
+                "WARNING": "⚠️",
+                "INFO": "ℹ️"
+            }.get(severity, "❓")
+            
+            # Format alert message
+            alert_message = f"""{severity_emoji} **{severity}: {title}**
+
+**Details:**
+```
+{message[:1500]}
+```
+
+**Timestamp:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
+**Source:** EconSentimentBot Health Monitor"""
+            
+            payload = {
+                "content": alert_message,
+                "username": "EconSentimentBot Health",
+                "avatar_url": "https://images.emojiterra.com/twitter/v14.0/512px/1f6a8.png"
+            }
+            
+            response = self.session.post(
+                self.health_webhook_url,
+                json=payload,
+                timeout=30,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 204:
+                logger.info(f"Health alert sent successfully: {title}")
+                return True
+            else:
+                logger.error(f"Failed to send health alert: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to send health alert: {str(e)}")
+            return False
+    
+    def test_connection(self) -> Dict[str, bool]:
+        """
+        Test Discord webhook connections.
+        
+        Returns:
+            Dict[str, bool]: Test results for each webhook
+        """
+        results = {}
+        
+        # Test main webhook
+        if self.webhook_url:
+            test_message = f"🧪 **Connection Test**\n\nEconSentimentBot connection test successful!\n\n_Timestamp: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC_"
+            payload = {
+                "content": test_message,
+                "username": "EconSentimentBot Test",
+                "avatar_url": "https://images.emojiterra.com/twitter/v14.0/512px/1f9ea.png"
+            }
+            
+            try:
+                response = self.session.post(self.webhook_url, json=payload, timeout=15)
+                results["main_webhook"] = response.status_code == 204
+                logger.info(f"Main webhook test: {'PASSED' if results['main_webhook'] else 'FAILED'}")
+            except Exception as e:
+                results["main_webhook"] = False
+                logger.error(f"Main webhook test failed: {str(e)}")
+        else:
+            results["main_webhook"] = False
+            logger.warning("Main webhook URL not configured")
+        
+        # Test health webhook
+        if self.health_webhook_url:
+            results["health_webhook"] = self._send_health_alert(
+                "Connection Test",
+                "Health webhook connection test successful!",
+                "INFO"
+            )
+        else:
+            results["health_webhook"] = False
+            logger.warning("Health webhook URL not configured")
+        
+        return results 

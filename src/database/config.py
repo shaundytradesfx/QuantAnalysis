@@ -17,8 +17,8 @@ DB_NAME = os.getenv("DB_NAME", "forex_sentiment")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-# SQLAlchemy connection string
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+# SQLAlchemy connection string - explicitly use psycopg3 driver
+DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Create SQLAlchemy engine
 engine = create_engine(DATABASE_URL)

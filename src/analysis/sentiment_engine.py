@@ -149,7 +149,7 @@ class SentimentCalculator:
                     forecast_value,
                     timestamp_collected
                 FROM indicators
-                WHERE timestamp_collected <= :current_time
+                WHERE timestamp_collected AT TIME ZONE 'UTC' <= :current_time
                 ORDER BY event_id, timestamp_collected DESC
             ) i ON i.event_id = e.id
             WHERE e.scheduled_datetime BETWEEN :week_start AND :week_end

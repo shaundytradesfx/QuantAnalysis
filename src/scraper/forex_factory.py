@@ -203,20 +203,48 @@ class ForexFactoryScraper:
         Returns:
             Optional[List[Dict[str, Any]]]: List of events from JSON API, None if failed.
         """
-        try:
-            logger.info(f"Fetching calendar data from JSON API: {self.JSON_API_URL}")
-            response = self.session.get(self.JSON_API_URL, timeout=15)
-            
-            if response.status_code == 200:
-                logger.info("Successfully fetched JSON calendar data")
-                return response.json()
-            else:
-                logger.warning(f"Failed to fetch JSON calendar, status code: {response.status_code}")
-                return None
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Fetching calendar data from JSON API: {self.JSON_API_URL} (attempt {attempt + 1}/{max_retries})")
                 
-        except (requests.RequestException, json.JSONDecodeError) as e:
-            logger.error(f"Error fetching JSON calendar: {str(e)}")
-            return None
+                # Use a simple session without compression headers for JSON API
+                simple_headers = {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "en-US,en;q=0.9"
+                }
+                
+                response = requests.get(self.JSON_API_URL, headers=simple_headers, timeout=15)
+                
+                if response.status_code == 200:
+                    logger.info("Successfully fetched JSON calendar data")
+                    logger.debug(f"Response content type: {response.headers.get('content-type')}")
+                    logger.debug(f"Response length: {len(response.text)}")
+                    return response.json()
+                elif response.status_code == 429:
+                    logger.warning(f"Rate limited (429), waiting {retry_delay} seconds before retry...")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        continue
+                else:
+                    logger.warning(f"Failed to fetch JSON calendar, status code: {response.status_code}")
+                    return None
+                    
+            except (requests.RequestException, json.JSONDecodeError) as e:
+                logger.error(f"Error fetching JSON calendar: {str(e)}")
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                return None
+        
+        logger.error(f"Failed to fetch JSON calendar after {max_retries} attempts")
+        return None
     
     def _parse_json_events(self, json_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -286,24 +314,21 @@ class ForexFactoryScraper:
     def scrape_calendar(self) -> List[Dict[str, Any]]:
         """
         Scrape the Forex Factory economic calendar.
-        First tries JSON API, falls back to HTML scraping if needed.
+        Prioritizes JSON API as requested, with HTML fallback only if JSON completely fails.
         
         Returns:
             List[Dict[str, Any]]: A list of economic events.
         """
-        # Try JSON API first
+        # Try JSON API first (with retries and rate limiting handling)
         json_data = self._fetch_json_calendar()
         if json_data:
             events = self._parse_json_events(json_data)
-            if events:
-                logger.info(f"Successfully scraped {len(events)} events from JSON API")
-                return events
-            else:
-                logger.warning("JSON API returned no high-impact events, trying HTML fallback")
+            logger.info(f"Successfully scraped {len(events)} events from JSON API")
+            return events
         else:
-            logger.warning("JSON API failed, trying HTML fallback")
+            logger.warning("JSON API failed completely after retries, trying HTML fallback")
         
-        # Fallback to HTML scraping
+        # Fallback to HTML scraping only if JSON API completely fails
         return self._scrape_html_calendar()
     
     def _scrape_html_calendar(self) -> List[Dict[str, Any]]:

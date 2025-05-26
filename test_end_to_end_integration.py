@@ -209,7 +209,7 @@ class TestEndToEndIntegration:
         )
         
         # Send notification
-        week_start, _ = calculator.get_current_week_bounds()
+        week_start, _ = calculator.get_next_week_bounds()
         success = notifier.send_weekly_report(sentiments, week_start)
         
         # Verify success
@@ -258,7 +258,7 @@ class TestEndToEndIntegration:
         notifier = DiscordNotifier(
             webhook_url="https://discord.com/api/webhooks/test/main"
         )
-        week_start, _ = calculator.get_current_week_bounds()
+        week_start, _ = calculator.get_next_week_bounds()
         notification_success = notifier.send_weekly_report(sentiments, week_start)
         
         # Step 5: Verify notification sent
@@ -299,7 +299,7 @@ class TestEndToEndIntegration:
             mock_response.status_code = 204
             mock_post.return_value = mock_response
             
-            week_start, _ = calculator.get_current_week_bounds()
+            week_start, _ = calculator.get_next_week_bounds()
             success = notifier.send_weekly_report({}, week_start)
             
             assert success is True
@@ -326,7 +326,7 @@ class TestEndToEndIntegration:
             health_webhook_url="https://discord.com/api/webhooks/test/health"
         )
         
-        week_start, _ = calculator.get_current_week_bounds()
+        week_start, _ = calculator.get_next_week_bounds()
         success = notifier.send_weekly_report(sentiments, week_start)
         
         # Should fail gracefully

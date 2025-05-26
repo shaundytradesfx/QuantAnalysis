@@ -1,111 +1,110 @@
-# Forex Factory Economic Calendar Sentiment Analysis
+# Forex Factory Sentiment Analyzer
 
-A comprehensive tool for analyzing economic calendar sentiment from Forex Factory and delivering automated weekly reports via Discord.
+A comprehensive system for automated economic calendar analysis and sentiment tracking from Forex Factory, with Discord notifications and a modern web dashboard.
 
-## Features
+## 🚀 Features
 
 - **Automated Data Scraping**: Retrieves high-impact economic events from Forex Factory
 - **Sentiment Analysis**: Calculates bullish/bearish/neutral sentiment based on forecast vs previous values
-- **Conflict Resolution**: Handles multiple events per currency with majority rules
-- **Discord Integration**: Sends formatted weekly reports to Discord channels
-- **Database Persistence**: Stores events, indicators, and calculated sentiments
-- **Health Monitoring**: Tracks system health and sends alerts
-- **Scheduling**: Automated daily scraping and weekly reporting
+- **Discord Integration**: Automated weekly reports and health alerts
+- **Web Dashboard**: Modern, responsive interface for viewing analysis and managing the system
+- **Database Persistence**: PostgreSQL storage with full audit trail
+- **Conflict Resolution**: Intelligent aggregation when multiple indicators conflict
+- **Health Monitoring**: System status tracking and alerting
 
-## Quick Start
+## 📊 Web Dashboard
 
-### 1. Installation
+The system includes a modern web dashboard built with vanilla JavaScript, Tailwind CSS, and Chart.js:
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd QuantitativeAnalysis
+### Features
+- **Real-time Sentiment Analysis**: View current week sentiment for all major currencies
+- **Interactive Charts**: Doughnut charts showing sentiment distribution
+- **Economic Indicators Table**: Detailed view of events and their impact
+- **Currency Filtering**: Easy navigation between different currencies
+- **Discord Integration**: Test webhooks and send reports directly from the UI
+- **Responsive Design**: Works on desktop and mobile devices
+- **Auto-refresh**: Data updates every 5 minutes
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
-cp env.template .env
-# Edit .env with your configuration
-```
-
-### 2. Database Setup
-
-```bash
-# Run database migrations
-alembic upgrade head
-```
-
-### 3. Discord Setup (Optional)
-
-1. Create Discord webhooks for your channels
-2. Set environment variables:
+### Access the Dashboard
+1. Start the web server:
    ```bash
-   export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/main/webhook"
-   export DISCORD_HEALTH_WEBHOOK_URL="https://discord.com/api/webhooks/your/health/webhook"
+   python -m src.main web
+   ```
+2. Open your browser to `http://127.0.0.1:8000`
+
+## 🛠 Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd QuantitativeAnalysis
    ```
 
-### 4. Test Discord Integration
+2. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-# Test Discord message formatting and webhook connections
-python demo_discord_notification.py
-```
+3. **Set up PostgreSQL database**
+   ```bash
+   createdb forex_sentiment
+   ```
 
-## Usage
+4. **Configure environment variables**
+   ```bash
+   cp env.template .env
+   # Edit .env with your database credentials and Discord webhook URL
+   ```
+
+5. **Run database migrations**
+   ```bash
+   alembic upgrade head
+   ```
+
+## 🎯 Usage
 
 ### Command Line Interface
 
-The application provides several commands:
+The system provides several commands for different operations:
 
-#### Scrape Economic Data
 ```bash
+# Run the scraper once
 python -m src.main scrape
-```
 
-#### Run Sentiment Analysis
-```bash
-# Analyze current week
+# Run sentiment analysis
 python -m src.main analyze
 
-# Analyze specific week
-python -m src.main analyze --week-start 2024-07-29 --week-end 2024-08-04
-```
-
-#### Send Discord Notifications
-```bash
-# Send notification for current week
+# Send Discord notification
 python -m src.main notify
 
-# Send notification for specific week
-python -m src.main notify --week-start 2024-07-29 --week-end 2024-08-04
-
-# Test Discord webhook connections
+# Test Discord webhook
 python -m src.main notify --test
-```
 
-#### Start Scheduler
-```bash
-# Run automated scheduling (daily scraping + weekly reports)
+# Start the scheduler (automated runs)
 python -m src.main schedule
-```
 
-#### Health Check
-```bash
+# Check system health
 python -m src.main health
+
+# Start the web dashboard
+python -m src.main web
 ```
 
-### Discord Message Format
+### Web Dashboard
 
-The Discord notifications include:
+Access the web interface at `http://127.0.0.1:8000` for:
+- Viewing sentiment analysis results
+- Managing system configuration
+- Testing Discord integration
+- Monitoring system health
 
-- **Header**: Week identification and analysis date
-- **Currency Sections**: Individual analysis for each currency
-  - Event details (previous vs forecast values)
-  - Individual event sentiments
-  - Overall currency assessment with narrative
-- **Net Summary**: Quick overview of all currency sentiments
-- **Footer**: Bot identification and next run schedule
+### Discord Integration
+
+The system sends automated weekly reports to Discord with:
+- Currency sentiment analysis (Bullish/Bearish/Neutral)
+- Individual event details (Previous vs Forecast)
+- Overall market assessment
+- Next run schedule
 
 Example Discord message:
 ```
@@ -114,11 +113,7 @@ Example Discord message:
 🇺🇸 USD
 1. CPI y/y: Prev=2.10, Forecast=2.30 → 🟢 Bullish
 2. Unemployment Rate: Prev=3.80, Forecast=3.70 → 🟢 Bullish
-Overall: 🟢 Bullish – Positive economic indicators suggest upside potential for USD & related assets
-
-🇪🇺 EUR
-1. PMI Manufacturing: Prev=49.20, Forecast=48.80 → 🔴 Bearish
-Overall: 🔴 Bearish – Negative economic indicators suggest downside pressure for EUR & related assets
+Overall: 🟢 Bullish – Positive economic indicators suggest upside potential
 
 📈 Net Summary:
 • USD: Bullish
@@ -127,109 +122,134 @@ Overall: 🔴 Bearish – Negative economic indicators suggest downside pressure
 Generated automatically by EconSentimentBot. Next run: May 26, 2025 at 06:00 UTC
 ```
 
-## Configuration
+## 🏗 Architecture
 
-### Environment Variables
+### Backend Components
+- **Scraper Module**: HTML parsing and data extraction from Forex Factory
+- **Analysis Engine**: Sentiment calculation with conflict resolution
+- **Discord Notifier**: Webhook integration and message formatting
+- **Database Layer**: PostgreSQL with SQLAlchemy ORM
+- **Scheduler**: APScheduler for automated runs
+- **FastAPI Server**: REST API for the web dashboard
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes |
-| `DISCORD_WEBHOOK_URL` | Main Discord webhook for reports | No |
-| `DISCORD_HEALTH_WEBHOOK_URL` | Discord webhook for health alerts | No |
-| `SENTIMENT_THRESHOLD` | Threshold for sentiment calculation (default: 0.0) | No |
+### Frontend Components
+- **Dashboard**: Modern web interface with real-time data
+- **Charts**: Interactive sentiment visualization
+- **API Integration**: RESTful communication with backend
+- **Responsive Design**: Mobile-friendly interface
 
-### Database Configuration
-
-The application uses PostgreSQL with the following tables:
+### Database Schema
 - `events`: Economic calendar events
-- `indicators`: Previous and forecast values
-- `sentiments`: Calculated weekly sentiments
-- `config`: Application configuration
+- `indicators`: Previous/forecast values with timestamps
+- `sentiments`: Calculated weekly sentiment analysis
+- `config`: System configuration settings
+- `audit_failures`: Error tracking and debugging
 
-## Architecture
+## 📅 Automated Schedule
 
-### Components
+- **Daily Scraper**: Runs at 02:00 UTC to capture new events
+- **Weekly Analysis**: Runs every Monday at 06:00 UTC
+- **Discord Reports**: Sent automatically after analysis completion
 
-1. **Scraper Module** (`src/scraper/`): Fetches data from Forex Factory
-2. **Analysis Engine** (`src/analysis/`): Calculates sentiment from economic data
-3. **Discord Notifier** (`src/discord/`): Formats and sends Discord messages
-4. **Database Layer** (`src/database/`): Data models and persistence
-5. **Scheduler** (`src/scheduler.py`): Automated task scheduling
-6. **Health Monitor** (`src/health_check.py`): System health tracking
+## 🔧 Configuration
 
-### Sentiment Calculation Logic
+Key environment variables:
 
-1. **Individual Events**: Compare forecast vs previous values
-   - `Forecast > Previous + δ` → Bullish
-   - `Forecast < Previous - δ` → Bearish
-   - Otherwise → Neutral
+```bash
+# Database
+DB_HOST=localhost
+DB_USER=shaun
+DB_NAME=forex_sentiment
 
-2. **Currency Aggregation**: Resolve conflicts using majority rules
-   - Majority bullish → Bullish
-   - Majority bearish → Bearish
-   - Ties → "Bearish/Bullish with Consolidation"
+# Discord
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 
-## Testing
+# Analysis
+SENTIMENT_THRESHOLD=0.0  # Threshold for bullish/bearish classification
+```
 
-### Run All Tests
+## 🧪 Testing
+
+Run the test suite:
 ```bash
 python run_tests.py
 ```
 
-### Test Specific Components
+Test individual components:
 ```bash
-# Test sentiment engine
-python -m pytest tests/analysis/test_sentiment_engine.py -v
-
-# Test Discord notifier
-python -m pytest tests/discord/test_notifier.py -v
-
-# Test scraper
-python -m pytest tests/scraper/ -v
-```
-
-### Demo Scripts
-```bash
-# Test Discord functionality
+# Test Discord integration
 python demo_discord_notification.py
 
-# Test sentiment calculation
+# Test sentiment analysis
 python demo_sentiment_test.py
+
+# Test database connection
+python test_database_connection.py
 ```
 
-## Development Timeline
+## 📈 Monitoring
 
-- **Day 1-2**: Database setup, scraper implementation
-- **Day 3**: Monitoring, scheduling, health checks
-- **Day 4**: Sentiment calculation engine
-- **Day 5**: Sentiment persistence and testing
-- **Day 6**: Discord notification system ✅
-- **Day 7**: Frontend dashboard (optional)
+### Health Checks
+- Database connectivity
+- Discord webhook status
+- Last successful scraper run
+- Last analysis completion
 
-## Monitoring & Alerts
+### Logging
+- Structured JSON logging
+- Error tracking with stack traces
+- Performance metrics
+- Audit trail for all operations
 
-The system includes comprehensive monitoring:
+## 🚀 Deployment
 
-- **Health Checks**: Automatic system health verification
-- **Discord Alerts**: Error notifications sent to health webhook
-- **Run Tracking**: Database logging of all operations
-- **Performance Monitoring**: Execution time tracking
+### Production Setup
+1. Configure production database
+2. Set up environment variables
+3. Configure reverse proxy (nginx)
+4. Set up systemd services for automation
+5. Configure monitoring and alerting
 
-## Contributing
+### Docker Deployment
+```bash
+# Build and run with Docker
+docker build -t forex-sentiment .
+docker run -d -p 8000:8000 forex-sentiment
+```
 
-1. Follow the existing code structure
-2. Add comprehensive tests for new features
-3. Update documentation
-4. Ensure all tests pass before submitting
+## 📚 API Documentation
 
-## License
+When the server is running, visit `http://127.0.0.1:8000/docs` for interactive API documentation.
 
-[Add your license information here]
+### Key Endpoints
+- `GET /api/health` - System health status
+- `GET /api/sentiments` - Current sentiment analysis
+- `GET /api/events` - Economic events data
+- `POST /api/discord/test` - Test Discord webhooks
+- `POST /api/discord/send-report` - Send weekly report
 
-## Support
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
 
 For issues and questions:
-1. Check the logs for error details
-2. Run health checks to verify system status
-3. Test Discord connections if notifications fail
-4. Review database connectivity for data issues 
+1. Check the troubleshooting guide in USAGE_GUIDE.md
+2. Review the logs for error details
+3. Test individual components using the demo scripts
+4. Open an issue with detailed error information
+
+## 🎉 Acknowledgments
+
+- Forex Factory for providing economic calendar data
+- Discord for webhook integration
+- The open-source community for the excellent libraries used 

@@ -56,6 +56,12 @@ def parse_args():
     # Health check command
     health_parser = subparsers.add_parser("health", help="Run health check")
     
+    # Web server command
+    web_parser = subparsers.add_parser("web", help="Start the web dashboard server")
+    web_parser.add_argument("--host", default="127.0.0.1", help="Host to bind the server to (default: 127.0.0.1)")
+    web_parser.add_argument("--port", type=int, default=8000, help="Port to bind the server to (default: 8000)")
+    web_parser.add_argument("--no-reload", action="store_true", help="Disable auto-reload in development")
+    
     return parser.parse_args()
 
 def run_discord_notification(week_start=None, week_end=None, test_mode=False):
@@ -99,7 +105,7 @@ def run_discord_notification(week_start=None, week_end=None, test_mode=False):
                 notification_week_start = week_start
             else:
                 sentiments = calculator.calculate_weekly_sentiments()
-                notification_week_start, _ = calculator.get_current_week_bounds()
+                notification_week_start, _ = calculator.get_next_week_bounds()
         
         if not sentiments:
             logger.warning("No sentiment data found for the specified week")
@@ -118,6 +124,27 @@ def run_discord_notification(week_start=None, week_end=None, test_mode=False):
             
     except Exception as e:
         logger.error(f"Error running Discord notification: {str(e)}")
+        return 1
+
+def run_web_server(host="127.0.0.1", port=8000, reload=True):
+    """
+    Run the web dashboard server.
+    
+    Args:
+        host (str): Host to bind the server to
+        port (int): Port to bind the server to
+        reload (bool): Whether to enable auto-reload
+        
+    Returns:
+        int: Exit code (0 for success, non-zero for failure)
+    """
+    try:
+        from src.api.server import run_server
+        logger.info(f"Starting web dashboard server on {host}:{port}")
+        run_server(host=host, port=port, reload=reload)
+        return 0
+    except Exception as e:
+        logger.error(f"Error starting web server: {str(e)}")
         return 1
 
 def handle_signal(signum, frame):
@@ -182,6 +209,10 @@ def main():
     elif args.command == "health":
         logger.info("Running health check...")
         return run_health_check()
+    elif args.command == "web":
+        logger.info("Starting web dashboard server...")
+        reload = not args.no_reload
+        return run_web_server(args.host, args.port, reload)
     else:
         logger.error(f"Unknown command: {args.command}")
         return 1

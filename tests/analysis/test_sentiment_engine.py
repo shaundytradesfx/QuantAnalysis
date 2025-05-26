@@ -43,9 +43,9 @@ class TestSentimentCalculator(unittest.TestCase):
         self.assertEqual(calc.threshold, 0.2)
         self.assertTrue(calc.close_db_on_exit)
     
-    def test_get_current_week_bounds(self):
+    def test_get_next_week_bounds(self):
         """
-        Test get_current_week_bounds method.
+        Test get_next_week_bounds method.
         """
         # Mock a specific date (Wednesday)
         test_date = datetime(2024, 1, 10, 15, 30, 0)  # Wednesday, Jan 10, 2024
@@ -53,12 +53,12 @@ class TestSentimentCalculator(unittest.TestCase):
         with patch('src.analysis.sentiment_engine.datetime') as mock_datetime:
             mock_datetime.utcnow.return_value = test_date
             
-            week_start, week_end = self.calculator.get_current_week_bounds()
+            week_start, week_end = self.calculator.get_next_week_bounds()
             
-            # Should be Monday Jan 8, 2024 00:00:00
-            expected_start = datetime(2024, 1, 8, 0, 0, 0)
-            # Should be Sunday Jan 14, 2024 23:59:59
-            expected_end = datetime(2024, 1, 14, 23, 59, 59)
+            # Should be Monday Jan 15, 2024 00:00:00 (next week)
+            expected_start = datetime(2024, 1, 15, 0, 0, 0)
+            # Should be Sunday Jan 21, 2024 23:59:59 (next week)
+            expected_end = datetime(2024, 1, 21, 23, 59, 59)
             
             self.assertEqual(week_start, expected_start)
             self.assertEqual(week_end, expected_end)

@@ -6,6 +6,9 @@ from bs4 import BeautifulSoup
 import re
 import datetime
 import time
+import random
+import json
+from dateutil import parser as date_parser
 from typing import List, Dict, Optional, Tuple, Any
 from urllib.parse import urljoin
 
@@ -19,6 +22,7 @@ class ForexFactoryScraper:
     """
     BASE_URL = "https://www.forexfactory.com"
     CALENDAR_URL = f"{BASE_URL}/calendar.php"
+    JSON_API_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
     
     def __init__(self, max_retries: int = 3, retry_delay: int = 2):
         """
@@ -31,13 +35,26 @@ class ForexFactoryScraper:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.session = requests.Session()
+        
+        # Enhanced headers to appear more like a real browser
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0"
         })
     
     def _fetch_with_retry(self, url: str) -> Optional[str]:
         """
-        Fetch a URL with retry logic.
+        Fetch a URL with retry logic and anti-bot detection avoidance.
         
         Args:
             url (str): The URL to fetch.
@@ -50,14 +67,40 @@ class ForexFactoryScraper:
         
         while current_retry < self.max_retries:
             try:
+                # Add random delay to appear more human-like
+                if current_retry > 0:
+                    delay = random.uniform(1.0, 3.0)
+                    logger.info(f"Adding random delay of {delay:.2f} seconds")
+                    time.sleep(delay)
+                
                 logger.info(f"Fetching URL: {url}")
-                response = self.session.get(url, timeout=10)
+                
+                # First, visit the main page to establish session
+                if current_retry == 0:
+                    logger.info("Establishing session by visiting main page...")
+                    main_response = self.session.get(self.BASE_URL, timeout=15, allow_redirects=True)
+                    if main_response.status_code == 200:
+                        logger.info("Successfully established session")
+                        # Add a small delay after visiting main page
+                        time.sleep(random.uniform(0.5, 1.5))
+                    else:
+                        logger.warning(f"Failed to establish session, status: {main_response.status_code}")
+                
+                # Now fetch the calendar page
+                response = self.session.get(url, timeout=15, allow_redirects=True)
                 
                 if response.status_code == 200:
                     logger.info(f"Successfully fetched URL: {url}")
                     return response.text
-                
-                logger.warning(f"Failed to fetch URL: {url}, status code: {response.status_code}")
+                elif response.status_code == 403:
+                    logger.warning(f"Access forbidden (403) for URL: {url}. Trying different approach...")
+                    # Try with different headers
+                    self._rotate_user_agent()
+                elif response.status_code == 429:
+                    logger.warning(f"Rate limited (429) for URL: {url}. Adding longer delay...")
+                    time.sleep(random.uniform(5.0, 10.0))
+                else:
+                    logger.warning(f"Failed to fetch URL: {url}, status code: {response.status_code}")
                 
             except (requests.RequestException, ConnectionError) as e:
                 logger.error(f"Error fetching URL: {url}, error: {str(e)}")
@@ -70,6 +113,22 @@ class ForexFactoryScraper:
         
         logger.error(f"Failed to fetch URL after {self.max_retries} retries: {url}")
         return None
+    
+    def _rotate_user_agent(self):
+        """
+        Rotate to a different user agent to avoid detection.
+        """
+        user_agents = [
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ]
+        
+        new_ua = random.choice(user_agents)
+        self.session.headers.update({"User-Agent": new_ua})
+        logger.info(f"Rotated to new user agent: {new_ua[:50]}...")
     
     def _parse_date(self, date_str: str) -> Optional[datetime.date]:
         """
@@ -137,12 +196,122 @@ class ForexFactoryScraper:
             logger.warning(f"Error parsing numeric value: {value_str}, error: {str(e)}")
             return None
     
+    def _fetch_json_calendar(self) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fetch calendar data from the JSON API endpoint.
+        
+        Returns:
+            Optional[List[Dict[str, Any]]]: List of events from JSON API, None if failed.
+        """
+        try:
+            logger.info(f"Fetching calendar data from JSON API: {self.JSON_API_URL}")
+            response = self.session.get(self.JSON_API_URL, timeout=15)
+            
+            if response.status_code == 200:
+                logger.info("Successfully fetched JSON calendar data")
+                return response.json()
+            else:
+                logger.warning(f"Failed to fetch JSON calendar, status code: {response.status_code}")
+                return None
+                
+        except (requests.RequestException, json.JSONDecodeError) as e:
+            logger.error(f"Error fetching JSON calendar: {str(e)}")
+            return None
+    
+    def _parse_json_events(self, json_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Parse events from JSON API data.
+        
+        Args:
+            json_data (List[Dict[str, Any]]): Raw JSON data from API.
+            
+        Returns:
+            List[Dict[str, Any]]: Parsed events in our standard format.
+        """
+        events = []
+        
+        for item in json_data:
+            try:
+                # Skip non-high impact events
+                impact_level = item.get('impact', '').strip()
+                if impact_level != 'High':
+                    continue
+                
+                # Extract basic fields
+                title = item.get('title', '').strip()
+                country = item.get('country', '').strip()
+                date_str = item.get('date', '').strip()
+                forecast_str = item.get('forecast', '').strip()
+                previous_str = item.get('previous', '').strip()
+                
+                # Skip if missing essential data
+                if not all([title, country, date_str]):
+                    continue
+                
+                # Parse datetime
+                try:
+                    scheduled_datetime = date_parser.parse(date_str)
+                    # Convert to UTC if it has timezone info
+                    if scheduled_datetime.tzinfo is not None:
+                        scheduled_datetime = scheduled_datetime.utctimetuple()
+                        scheduled_datetime = datetime.datetime(*scheduled_datetime[:6])
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Failed to parse date '{date_str}': {e}")
+                    continue
+                
+                # Parse numeric values
+                previous_value = self._parse_numeric_value(previous_str)
+                forecast_value = self._parse_numeric_value(forecast_str)
+                
+                # Create event
+                event = {
+                    "currency": country,
+                    "event_name": title,
+                    "scheduled_datetime": scheduled_datetime,
+                    "impact_level": impact_level,
+                    "previous_value": previous_value,
+                    "forecast_value": forecast_value
+                }
+                
+                events.append(event)
+                logger.debug(f"Parsed event: {country} - {title} at {scheduled_datetime}")
+                
+            except Exception as e:
+                logger.warning(f"Error parsing event {item}: {e}")
+                continue
+        
+        logger.info(f"Parsed {len(events)} high-impact events from JSON API")
+        return events
+    
     def scrape_calendar(self) -> List[Dict[str, Any]]:
         """
         Scrape the Forex Factory economic calendar.
+        First tries JSON API, falls back to HTML scraping if needed.
         
         Returns:
             List[Dict[str, Any]]: A list of economic events.
+        """
+        # Try JSON API first
+        json_data = self._fetch_json_calendar()
+        if json_data:
+            events = self._parse_json_events(json_data)
+            if events:
+                logger.info(f"Successfully scraped {len(events)} events from JSON API")
+                return events
+            else:
+                logger.warning("JSON API returned no high-impact events, trying HTML fallback")
+        else:
+            logger.warning("JSON API failed, trying HTML fallback")
+        
+        # Fallback to HTML scraping
+        return self._scrape_html_calendar()
+    
+    def _scrape_html_calendar(self) -> List[Dict[str, Any]]:
+        """
+        Fallback HTML scraping method.
+        
+        Returns:
+            List[Dict[str, Any]]: A list of economic events from HTML parsing.
         """
         html_content = self._fetch_with_retry(self.CALENDAR_URL)
         if not html_content:
@@ -231,5 +400,5 @@ class ForexFactoryScraper:
                     "forecast_value": forecast_value
                 })
         
-        logger.info(f"Scraped {len(events)} high-impact events from Forex Factory.")
+        logger.info(f"Scraped {len(events)} high-impact events from HTML.")
         return events 

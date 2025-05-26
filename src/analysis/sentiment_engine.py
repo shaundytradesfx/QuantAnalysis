@@ -35,6 +35,21 @@ class SentimentCalculator:
         self.threshold = threshold if threshold is not None else float(os.getenv("SENTIMENT_THRESHOLD", "0.0"))
         self.close_db_on_exit = db_session is None
         
+        # Define inverse indicators where higher values are negative for the economy
+        self.inverse_indicators = {
+            # Unemployment indicators (higher = worse)
+            "unemployment claims",
+            "initial jobless claims", 
+            "continuing jobless claims",
+            "unemployment rate",
+            "jobless claims",
+            "weekly unemployment claims",
+            
+            # Other negative indicators
+            "business inventories",
+            "crude oil inventories"
+        }
+        
         if self.db is None:
             self.db = SessionLocal()
     
@@ -45,12 +60,53 @@ class SentimentCalculator:
         if self.close_db_on_exit and self.db:
             self.db.close()
     
-    def get_current_week_bounds(self) -> Tuple[datetime, datetime]:
+    def is_inverse_indicator(self, event_name: str) -> bool:
         """
-        Get the start and end of the current week (Monday to Sunday UTC).
+        Check if an indicator is an inverse indicator (higher = worse for economy).
+        
+        Args:
+            event_name (str): Name of the economic indicator.
+            
+        Returns:
+            bool: True if it's an inverse indicator.
+        """
+        event_name_lower = event_name.lower()
+        
+        # Check for exact matches or partial matches
+        for inverse_indicator in self.inverse_indicators:
+            if inverse_indicator in event_name_lower:
+                return True
+        
+        return False
+    
+    def get_next_week_bounds(self) -> Tuple[datetime, datetime]:
+        """
+        Get the start and end of the next trading week (Monday to Sunday UTC).
         
         Returns:
-            Tuple[datetime, datetime]: Week start and end datetimes.
+            Tuple[datetime, datetime]: Next week start and end datetimes.
+        """
+        now = datetime.utcnow()
+        
+        # Find the Monday of this week
+        days_since_monday = now.weekday()
+        current_week_start = now - timedelta(days=days_since_monday)
+        current_week_start = current_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Add 7 days to get next week's Monday
+        week_start = current_week_start + timedelta(days=7)
+        
+        # Find the Sunday of next week
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        
+        return week_start, week_end
+    
+    def get_current_week_bounds(self) -> Tuple[datetime, datetime]:
+        """
+        Get the start and end of the current trading week (Monday to Sunday UTC).
+        
+        Returns:
+            Tuple[datetime, datetime]: Current week start and end datetimes.
         """
         now = datetime.utcnow()
         
@@ -134,17 +190,27 @@ class SentimentCalculator:
         """
         previous = event.get("previous_value")
         forecast = event.get("forecast_value")
+        event_name = event.get("event_name", "")
+        scheduled_datetime = event.get("scheduled_datetime")
+        
+        # Convert datetime to ISO string for JSON serialization
+        if scheduled_datetime and hasattr(scheduled_datetime, 'isoformat'):
+            scheduled_datetime_str = scheduled_datetime.isoformat()
+        else:
+            scheduled_datetime_str = str(scheduled_datetime) if scheduled_datetime else None
         
         # Initialize sentiment data
         sentiment_data = {
             "event_id": event["event_id"],
-            "event_name": event["event_name"],
+            "event_name": event_name,
             "previous_value": previous,
             "forecast_value": forecast,
+            "scheduled_datetime": scheduled_datetime_str,  # Use string format for JSON
             "sentiment": 0,  # Default neutral
             "sentiment_label": "Neutral",
             "data_available": True,
-            "reason": None
+            "reason": None,
+            "is_inverse": self.is_inverse_indicator(event_name)
         }
         
         # Check if we have both values
@@ -157,25 +223,71 @@ class SentimentCalculator:
             })
             return sentiment_data
         
+        # Skip sentiment calculation for speaking events and non-numeric events
+        if any(keyword in event_name.lower() for keyword in ["speaks", "speech", "meeting", "conference", "statement", "press"]):
+            sentiment_data.update({
+                "sentiment": 0,
+                "sentiment_label": "Neutral",
+                "reason": "Speaking event - no directional sentiment"
+            })
+            return sentiment_data
+        
         # Calculate the difference
         difference = forecast - previous
         
-        # Apply threshold logic
-        if difference > self.threshold:
+        # Check if values are equal - this should be bullish (meeting expectations)
+        if abs(difference) <= 1e-10:  # Handle floating point precision
             sentiment_data.update({
                 "sentiment": 1,
-                "sentiment_label": "Bullish"
+                "sentiment_label": "Bullish",
+                "reason": "Forecast meets previous value (stability/meeting expectations)"
             })
-        elif difference < -self.threshold:
-            sentiment_data.update({
-                "sentiment": -1,
-                "sentiment_label": "Bearish"
-            })
+            return sentiment_data
+        
+        # Determine if this is an inverse indicator
+        is_inverse = self.is_inverse_indicator(event_name)
+        
+        # Apply threshold logic with inverse consideration
+        if is_inverse:
+            # For inverse indicators: higher forecast = worse (bearish), lower forecast = better (bullish)
+            if difference > self.threshold:
+                sentiment_data.update({
+                    "sentiment": -1,
+                    "sentiment_label": "Bearish",
+                    "reason": f"Higher forecast for inverse indicator ({event_name})"
+                })
+            elif difference < -self.threshold:
+                sentiment_data.update({
+                    "sentiment": 1,
+                    "sentiment_label": "Bullish",
+                    "reason": f"Lower forecast for inverse indicator ({event_name})"
+                })
+            else:
+                sentiment_data.update({
+                    "sentiment": 0,
+                    "sentiment_label": "Neutral",
+                    "reason": "Within threshold for inverse indicator"
+                })
         else:
-            sentiment_data.update({
-                "sentiment": 0,
-                "sentiment_label": "Neutral"
-            })
+            # For normal indicators: higher forecast = better (bullish), lower forecast = worse (bearish)
+            if difference > self.threshold:
+                sentiment_data.update({
+                    "sentiment": 1,
+                    "sentiment_label": "Bullish",
+                    "reason": f"Higher forecast for normal indicator ({event_name})"
+                })
+            elif difference < -self.threshold:
+                sentiment_data.update({
+                    "sentiment": -1,
+                    "sentiment_label": "Bearish",
+                    "reason": f"Lower forecast for normal indicator ({event_name})"
+                })
+            else:
+                sentiment_data.update({
+                    "sentiment": 0,
+                    "sentiment_label": "Neutral",
+                    "reason": "Within threshold for normal indicator"
+                })
         
         return sentiment_data
     

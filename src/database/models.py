@@ -2,7 +2,7 @@
 Database models for the Forex Factory Sentiment Analyzer.
 """
 import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, JSON, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, JSON, Text, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -77,4 +77,41 @@ class Config(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     def __repr__(self):
-        return f"<Config(key='{self.key}', updated_at='{self.updated_at}')>" 
+        return f"<Config(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class AuditFailure(Base):
+    """
+    Audit table to store failed parsing attempts as specified in PRD.
+    """
+    __tablename__ = "audit_failures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(Text)  # URL that failed to parse
+    error_type = Column(String(50), index=True)  # Type of error (e.g., "PARSING_ERROR", "NETWORK_ERROR")
+    error_message = Column(Text)  # Detailed error message
+    html_snippet = Column(Text)  # Snippet of HTML that caused the issue (for debugging)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    retry_count = Column(Integer, default=0)  # Number of retry attempts
+    resolved = Column(Boolean, default=False, index=True)  # Whether the issue was resolved
+    
+    def __repr__(self):
+        return f"<AuditFailure(id={self.id}, error_type='{self.error_type}', resolved={self.resolved})>"
+
+
+class Admin(Base):
+    """
+    Admin users for authentication.
+    """
+    __tablename__ = "admins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    
+    def __repr__(self):
+        return f"<Admin(id={self.id}, username='{self.username}')>" 

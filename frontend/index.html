@@ -244,9 +244,11 @@
         </div>
     </div>
 
+    <!-- Load configuration first -->
+    <script src="config.js"></script>
     <script src="static/js/dashboard.js?v=20250526220000"></script>
     <script>
-        // Authentication handling
+        // Authentication handling for Firebase hosted frontend
         const urlParams = new URLSearchParams(window.location.search);
         const isAuthenticated = urlParams.get('authenticated') === 'true';
         let authToken = sessionStorage.getItem('authToken');
@@ -260,13 +262,18 @@
         }
         
         if (!authToken && !isAuthenticated) {
-            // Redirect to authentication page if no token
-            window.location.href = '/auth';
+            // Show authentication prompt instead of redirecting
+            showAuthenticationPrompt();
         } else if (authToken) {
-            // Set up authenticated fetch for all API calls
+            // Set up authenticated fetch for all API calls to Cloud Run
             const originalFetch = window.fetch;
             window.fetch = function(url, options = {}) {
+                // Convert relative URLs to absolute Cloud Run URLs
                 if (url.startsWith('/api/')) {
+                    url = CONFIG.API_BASE_URL + url;
+                }
+                
+                if (url.includes(CONFIG.API_BASE_URL)) {
                     options.headers = options.headers || {};
                     options.headers['Authorization'] = `Bearer ${authToken}`;
                 }
@@ -292,6 +299,83 @@
             if (isAuthenticated) {
                 window.history.replaceState({}, document.title, '/');
             }
+        }
+        
+        // Authentication prompt for Firebase hosted frontend
+        function showAuthenticationPrompt() {
+            const authModal = document.createElement('div');
+            authModal.id = 'auth-modal';
+            authModal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 10000;
+            `;
+            
+            authModal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%;">
+                    <h2 style="color: #333; margin-bottom: 20px;">🔐 Authentication Required</h2>
+                    <p style="color: #666; margin-bottom: 20px;">To access the dashboard, please enter your Google Cloud identity token:</p>
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; margin: 10px 0;">
+                        gcloud auth print-identity-token
+                    </div>
+                    <textarea id="auth-token" placeholder="Paste your identity token here..." style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin: 10px 0; box-sizing: border-box;"></textarea>
+                    <div style="text-align: center;">
+                        <button onclick="authenticateWithToken()" style="background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                            🚀 Access Dashboard
+                        </button>
+                        <button onclick="testTokenConnection()" style="background: #007bff; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                            🔍 Test Token
+                        </button>
+                    </div>
+                    <div id="auth-status" style="margin-top: 15px; text-align: center;"></div>
+                </div>
+            `;
+            
+            document.body.appendChild(authModal);
+        }
+        
+        function authenticateWithToken() {
+            const token = document.getElementById('auth-token').value.trim();
+            if (!token) {
+                document.getElementById('auth-status').innerHTML = '<div style="color: red;">Please enter your token</div>';
+                return;
+            }
+            
+            sessionStorage.setItem('authToken', token);
+            localStorage.setItem('gcloud_token', token);
+            document.getElementById('auth-modal').remove();
+            location.reload();
+        }
+        
+        function testTokenConnection() {
+            const token = document.getElementById('auth-token').value.trim();
+            if (!token) {
+                document.getElementById('auth-status').innerHTML = '<div style="color: red;">Please enter your token first</div>';
+                return;
+            }
+            
+            document.getElementById('auth-status').innerHTML = '<div style="color: blue;">Testing connection...</div>';
+            
+            fetch(CONFIG.API_BASE_URL + '/api/health', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('auth-status').innerHTML = '<div style="color: green;">✅ Token is valid!</div>';
+                } else {
+                    document.getElementById('auth-status').innerHTML = '<div style="color: red;">❌ Token test failed</div>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('auth-status').innerHTML = '<div style="color: red;">❌ Connection error</div>';
+            });
         }
     </script>
 </body>

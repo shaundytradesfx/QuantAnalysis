@@ -1,615 +1,567 @@
 /**
- * Dashboard JavaScript for ForexSentiment Analysis
- * Handles API communication, chart rendering, and UI interactions
+ * Dashboard JavaScript for Forex Sentiment Analyzer
+ * Handles API communication with Cloud Run backend
  */
 
-class ForexDashboard {
-    constructor() {
-        this.apiBaseUrl = 'http://127.0.0.1:8000';
-        this.selectedCurrency = 'USD';
-        this.sentimentChart = null;
-        this.sentimentData = {};
-        this.eventsData = [];
-        this.configData = [];
-        this.activeTab = 'dashboard';
+// Global variables
+let currentCurrency = 'USD';
+let sentimentChart = null;
+let sentimentData = {};
+let eventsData = [];
+
+// Initialize dashboard when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDashboard();
+});
+
+/**
+ * Initialize the dashboard
+ */
+async function initializeDashboard() {
+    try {
+        // Show loading overlay
+        showLoading(true);
         
-        this.init();
-    }
-
-    async init() {
-        this.setupEventListeners();
-        await this.loadInitialData();
-        this.initializeChart();
-        this.selectCurrency('USD');
-    }
-
-    setupEventListeners() {
-        // Tab navigation
-        document.querySelectorAll('.nav-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                e.preventDefault();
-                const tabName = e.target.dataset.tab;
-                this.switchTab(tabName);
-            });
-        });
-
-        // Currency selection
-        document.querySelectorAll('.currency-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                const currency = e.currentTarget.dataset.currency;
-                this.selectCurrency(currency);
-            });
-        });
-
-        // Discord actions
-        document.getElementById('test-webhook').addEventListener('click', () => {
-            this.testDiscordWebhook();
-        });
-
-        document.getElementById('send-report').addEventListener('click', () => {
-            this.sendWeeklyReport();
-        });
-
-        // Auto-refresh every 5 minutes
-        setInterval(() => {
-            this.refreshData();
-        }, 5 * 60 * 1000);
-    }
-
-    switchTab(tabName) {
-        // Update active tab
-        this.activeTab = tabName;
+        // Initialize navigation
+        initializeNavigation();
         
-        // Update navigation
-        document.querySelectorAll('.nav-tab').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        // Load initial data
+        await loadDashboardData();
         
-        // Show/hide content
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.classList.add('hidden');
-        });
+        // Initialize chart
+        initializeSentimentChart();
         
-        const contentId = `${tabName}-content`;
-        const contentElement = document.getElementById(contentId);
-        if (contentElement) {
-            contentElement.classList.remove('hidden');
-        }
+        // Set up event listeners
+        setupEventListeners();
         
-        // Load tab-specific data
-        if (tabName === 'configuration') {
-            this.loadConfigurationData();
-        }
-    }
-
-    async loadInitialData() {
-        this.showLoading(true);
-        try {
-            await Promise.all([
-                this.loadHealthStatus(),
-                this.loadSentimentData(),
-                this.loadEventsData(),
-                this.loadDiscordStatus()
-            ]);
-            this.updateUI();
-        } catch (error) {
-            console.error('Error loading initial data:', error);
-            this.showError('Failed to load dashboard data');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    async refreshData() {
-        try {
-            await Promise.all([
-                this.loadHealthStatus(),
-                this.loadSentimentData(),
-                this.loadEventsData()
-            ]);
-            this.updateUI();
-        } catch (error) {
-            console.error('Error refreshing data:', error);
-        }
-    }
-
-    async loadHealthStatus() {
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/health`);
-            const health = await response.json();
-            this.updateHealthStatus(health);
-        } catch (error) {
-            console.error('Error loading health status:', error);
-            this.updateHealthStatus({ status: 'unhealthy', database: 'unknown', discord: 'unknown' });
-        }
-    }
-
-    async loadSentimentData() {
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/sentiments`);
-            this.sentimentData = {};
-            
-            if (response.ok) {
-                const sentiments = await response.json();
-                sentiments.forEach(sentiment => {
-                    this.sentimentData[sentiment.currency] = sentiment;
-                });
-            }
-        } catch (error) {
-            console.error('Error loading sentiment data:', error);
-        }
-    }
-
-    async loadEventsData() {
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/events?limit=50`);
-            if (response.ok) {
-                this.eventsData = await response.json();
-            }
-        } catch (error) {
-            console.error('Error loading events data:', error);
-        }
-    }
-
-    async loadConfigurationData() {
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/config`);
-            if (response.ok) {
-                this.configData = await response.json();
-                this.updateConfigurationUI();
-            }
-        } catch (error) {
-            console.error('Error loading configuration data:', error);
-        }
-    }
-
-    async loadDiscordStatus() {
-        // This would be implemented when we have Discord status endpoints
-        // For now, we'll show basic status
-        this.updateDiscordStatus();
-    }
-
-    updateHealthStatus(health) {
-        const statusElement = document.getElementById('health-status');
-        const isHealthy = health.status === 'healthy';
+        // Hide loading overlay
+        showLoading(false);
         
-        statusElement.innerHTML = `
-            <div class="w-3 h-3 ${isHealthy ? 'bg-green-400' : 'bg-red-400'} rounded-full ${isHealthy ? 'animate-pulse' : ''}"></div>
-            <span class="text-sm">${isHealthy ? 'System Healthy' : 'System Issues'}</span>
-        `;
-    }
-
-    updateUI() {
-        this.updateCurrentWeek();
-        this.updateSidebarSentiments();
-        this.updateCurrencySummary();
-        this.updateIndicatorsTable();
-        this.updateWeeklySummary();
-        this.updateSentimentChart();
-    }
-
-    updateCurrentWeek() {
-        const now = new Date();
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - now.getDay() + 1);
-        
-        const weekText = `Week of ${monday.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-        })}`;
-        
-        document.getElementById('current-week').textContent = weekText;
-    }
-
-    updateSidebarSentiments() {
-        const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
-        
-        currencies.forEach(currency => {
-            const element = document.getElementById(`${currency.toLowerCase()}-sentiment`);
-            if (element) {
-                const sentiment = this.sentimentData[currency];
-                if (sentiment) {
-                    const sentimentClass = this.getSentimentClass(sentiment.final_sentiment);
-                    const sentimentIcon = this.getSentimentIcon(sentiment.final_sentiment);
-                    element.innerHTML = `<span class="${sentimentClass}">${sentimentIcon}</span>`;
-                } else {
-                    element.innerHTML = '<span class="text-gray-400">—</span>';
-                }
-            }
-        });
-    }
-
-    updateCurrencySummary() {
-        const summaryElement = document.getElementById('currency-summary');
-        const sentiment = this.sentimentData[this.selectedCurrency];
-        
-        if (sentiment) {
-            const sentimentClass = this.getSentimentClass(sentiment.final_sentiment);
-            const sentimentIcon = this.getSentimentIcon(sentiment.final_sentiment);
-            
-            summaryElement.innerHTML = `
-                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
-                        <h3 class="font-semibold text-lg">${this.selectedCurrency}</h3>
-                        <p class="text-sm text-gray-600">Overall Sentiment</p>
-                    </div>
-                    <div class="text-right">
-                        <div class="${sentimentClass} text-2xl">${sentimentIcon}</div>
-                        <p class="${sentimentClass} font-medium">${sentiment.final_sentiment}</p>
-                    </div>
-                </div>
-                <div class="space-y-2">
-                    <h4 class="font-medium">Recent Events:</h4>
-                    ${sentiment.events.map(event => `
-                        <div class="text-sm p-2 bg-gray-50 rounded">
-                            <span class="font-medium">${event.event_name}</span>
-                            <div class="text-gray-600">
-                                Prev: ${event.previous_value !== null && event.previous_value !== undefined ? event.previous_value : 'N/A'} | 
-                                Forecast: ${event.forecast_value !== null && event.forecast_value !== undefined ? event.forecast_value : 'N/A'}
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        } else {
-            summaryElement.innerHTML = `
-                <div class="text-center py-8 text-gray-500">
-                    <i class="fas fa-chart-line text-4xl mb-4"></i>
-                    <p>No sentiment data available for ${this.selectedCurrency}</p>
-                </div>
-            `;
-        }
-    }
-
-    updateIndicatorsTable() {
-        const tableBody = document.getElementById('indicators-table');
-        const sentiment = this.sentimentData[this.selectedCurrency];
-        
-        // Debug logging
-        console.log('updateIndicatorsTable called for currency:', this.selectedCurrency);
-        console.log('Sentiment data:', sentiment);
-        
-        if (!sentiment || !sentiment.events || sentiment.events.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
-                        No economic indicators data available for ${this.selectedCurrency}
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        // Debug each event
-        sentiment.events.forEach(event => {
-            console.log(`Event: ${event.event_name}`);
-            console.log(`- Previous: ${event.previous_value} (type: ${typeof event.previous_value})`);
-            console.log(`- Forecast: ${event.forecast_value} (type: ${typeof event.forecast_value})`);
-            console.log(`- Sentiment: ${event.sentiment_label}`);
-        });
-
-        tableBody.innerHTML = sentiment.events.map(event => {
-            const sentimentClass = this.getSentimentClass(event.sentiment_label);
-            const sentimentIcon = this.getSentimentIcon(event.sentiment_label);
-            const eventDate = new Date(event.scheduled_datetime).toLocaleDateString();
-            
-            // Debug the null check logic
-            const prevValue = event.previous_value !== null && event.previous_value !== undefined ? event.previous_value : 'N/A';
-            const forecastValue = event.forecast_value !== null && event.forecast_value !== undefined ? event.forecast_value : 'N/A';
-            
-            console.log(`Processing ${event.event_name}: prev=${prevValue}, forecast=${forecastValue}`);
-            
-            return `
-                <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-3 text-sm">${event.event_name}</td>
-                    <td class="px-4 py-3 text-sm font-medium">${this.selectedCurrency}</td>
-                    <td class="px-4 py-3 text-sm">${prevValue}</td>
-                    <td class="px-4 py-3 text-sm">${forecastValue}</td>
-                    <td class="px-4 py-3 text-sm">
-                        <span class="${sentimentClass}">${sentimentIcon} ${event.sentiment_label}</span>
-                    </td>
-                    <td class="px-4 py-3 text-sm text-gray-600">
-                        ${eventDate}
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    updateWeeklySummary() {
-        const summaryElement = document.getElementById('weekly-summary');
-        const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
-        
-        summaryElement.innerHTML = currencies.map(currency => {
-            const sentiment = this.sentimentData[currency];
-            const sentimentClass = sentiment ? this.getSentimentClass(sentiment.final_sentiment) : 'text-gray-400';
-            const sentimentIcon = sentiment ? this.getSentimentIcon(sentiment.final_sentiment) : '—';
-            const sentimentText = sentiment ? sentiment.final_sentiment : 'No Data';
-            
-            return `
-                <div class="bg-white p-4 rounded-lg border border-gray-200 text-center cursor-pointer hover:shadow-md transition-shadow"
-                     onclick="dashboard.selectCurrency('${currency}')">
-                    <div class="text-2xl mb-2">${this.getCurrencyFlag(currency)}</div>
-                    <h3 class="font-semibold text-lg mb-1">${currency}</h3>
-                    <div class="${sentimentClass} text-sm">
-                        ${sentimentIcon} ${sentimentText}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    updateDiscordStatus() {
-        const statusElement = document.getElementById('discord-status');
-        statusElement.innerHTML = `
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span class="text-sm">Webhook Connection</span>
-                <span class="text-green-600 text-sm">
-                    <i class="fas fa-check-circle mr-1"></i>Connected
-                </span>
-            </div>
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span class="text-sm">Last Report Sent</span>
-                <span class="text-gray-600 text-sm">2 days ago</span>
-            </div>
-        `;
-    }
-
-    updateConfigurationUI() {
-        const configElement = document.getElementById('config-settings');
-        
-        if (this.configData.length === 0) {
-            configElement.innerHTML = `
-                <div class="text-center py-8 text-gray-500">
-                    <i class="fas fa-cog text-4xl mb-4"></i>
-                    <p>No configuration settings found</p>
-                </div>
-            `;
-            return;
-        }
-
-        configElement.innerHTML = this.configData.map(config => `
-            <div class="border border-gray-200 rounded-lg p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <label class="font-medium text-gray-700">${config.key}</label>
-                    <span class="text-xs text-gray-500">
-                        Updated: ${new Date(config.updated_at).toLocaleDateString()}
-                    </span>
-                </div>
-                <div class="flex space-x-2">
-                    <input 
-                        type="text" 
-                        value="${config.value}" 
-                        class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        data-config-key="${config.key}"
-                    >
-                    <button 
-                        onclick="dashboard.updateConfigValue('${config.key}')"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                        Update
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    async updateConfigValue(key) {
-        const input = document.querySelector(`[data-config-key="${key}"]`);
-        const value = input.value;
-        
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/config`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ key, value })
-            });
-            
-            if (response.ok) {
-                this.showSuccess(`Configuration ${key} updated successfully`);
-                await this.loadConfigurationData();
-            } else {
-                this.showError(`Failed to update configuration ${key}`);
-            }
-        } catch (error) {
-            console.error('Error updating configuration:', error);
-            this.showError('Error updating configuration');
-        }
-    }
-
-    initializeChart() {
-        const ctx = document.getElementById('sentimentChart').getContext('2d');
-        
-        this.sentimentChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Bullish', 'Bearish', 'Neutral'],
-                datasets: [{
-                    data: [0, 0, 1],
-                    backgroundColor: ['#10b981', '#ef4444', '#6b7280'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-        
-        this.updateSentimentChart();
-    }
-
-    updateSentimentChart() {
-        if (!this.sentimentChart) return;
-        
-        const sentiment = this.sentimentData[this.selectedCurrency];
-        
-        if (sentiment && sentiment.events) {
-            const bullishCount = sentiment.events.filter(e => 
-                e.sentiment_label === 'Bullish'
-            ).length;
-            
-            const bearishCount = sentiment.events.filter(e => 
-                e.sentiment_label === 'Bearish'
-            ).length;
-            
-            const neutralCount = sentiment.events.filter(e => 
-                e.sentiment_label === 'Neutral'
-            ).length;
-            
-            this.sentimentChart.data.datasets[0].data = [bullishCount, bearishCount, neutralCount];
-        } else {
-            this.sentimentChart.data.datasets[0].data = [0, 0, 1];
-        }
-        
-        this.sentimentChart.update();
-    }
-
-    selectCurrency(currency) {
-        this.selectedCurrency = currency;
-        
-        // Update UI to show selected currency
-        document.querySelectorAll('.currency-item').forEach(item => {
-            item.classList.remove('bg-blue-50', 'border-blue-200');
-        });
-        
-        const selectedItem = document.querySelector(`[data-currency="${currency}"]`);
-        if (selectedItem) {
-            selectedItem.classList.add('bg-blue-50', 'border-blue-200');
-        }
-        
-        document.getElementById('selected-currency').textContent = currency;
-        
-        this.updateCurrencySummary();
-        this.updateIndicatorsTable();
-        this.updateSentimentChart();
-    }
-
-    async testDiscordWebhook() {
-        this.showLoading(true);
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/discord/test`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            const result = await response.json();
-            
-            if (response.ok && result.status === 'success') {
-                this.showSuccess('Discord webhook test completed successfully!');
-            } else {
-                this.showError(result.message || 'Discord webhook test failed');
-            }
-        } catch (error) {
-            console.error('Error testing Discord webhook:', error);
-            this.showError('Error testing Discord webhook');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    async sendWeeklyReport() {
-        this.showLoading(true);
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/discord/send-report`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            const result = await response.json();
-            
-            if (response.ok && result.status === 'success') {
-                this.showSuccess('Weekly report sent to Discord successfully!');
-            } else {
-                this.showError(result.message || 'Failed to send weekly report');
-            }
-        } catch (error) {
-            console.error('Error sending weekly report:', error);
-            this.showError('Error sending weekly report');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    getSentimentClass(sentiment) {
-        switch (sentiment?.toLowerCase()) {
-            case 'bullish': return 'sentiment-bullish';
-            case 'bearish': return 'sentiment-bearish';
-            default: return 'sentiment-neutral';
-        }
-    }
-
-    getSentimentIcon(sentiment) {
-        switch (sentiment?.toLowerCase()) {
-            case 'bullish': return '🟢';
-            case 'bearish': return '🔴';
-            default: return '⚪';
-        }
-    }
-
-    getCurrencyFlag(currency) {
-        const flags = {
-            'USD': '🇺🇸',
-            'EUR': '🇪🇺',
-            'GBP': '🇬🇧',
-            'JPY': '🇯🇵',
-            'AUD': '🇦🇺',
-            'CAD': '🇨🇦',
-            'CHF': '🇨🇭',
-            'NZD': '🇳🇿'
-        };
-        return flags[currency] || '🏳️';
-    }
-
-    showLoading(show) {
-        const overlay = document.getElementById('loading-overlay');
-        overlay.classList.toggle('hidden', !show);
-    }
-
-    showSuccess(message) {
-        this.showNotification(message, 'success');
-    }
-
-    showError(message) {
-        this.showNotification(message, 'error');
-    }
-
-    showNotification(message, type) {
-        // Create a simple notification
-        const notification = document.createElement('div');
-        notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
-            type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-        }`;
-        notification.innerHTML = `
-            <div class="flex items-center space-x-2">
-                <i class="fas fa-${type === 'success' ? 'check' : 'exclamation-triangle'}"></i>
-                <span>${message}</span>
-            </div>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            notification.remove();
-        }, 5000);
+        console.log('Dashboard initialized successfully');
+    } catch (error) {
+        console.error('Error initializing dashboard:', error);
+        showError('Failed to initialize dashboard: ' + error.message);
+        showLoading(false);
     }
 }
 
-// Initialize dashboard when DOM is loaded
-let dashboard;
-document.addEventListener('DOMContentLoaded', () => {
-    dashboard = new ForexDashboard();
-}); 
+/**
+ * Initialize navigation tabs
+ */
+function initializeNavigation() {
+    const navTabs = document.querySelectorAll('.nav-tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    navTabs.forEach(tab => {
+        tab.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Remove active class from all tabs
+            navTabs.forEach(t => t.classList.remove('active'));
+            tabContents.forEach(content => content.classList.add('hidden'));
+            
+            // Add active class to clicked tab
+            this.classList.add('active');
+            
+            // Show corresponding content
+            const tabName = this.getAttribute('data-tab');
+            const content = document.getElementById(tabName + '-content');
+            if (content) {
+                content.classList.remove('hidden');
+            }
+            
+            // Load tab-specific data
+            loadTabData(tabName);
+        });
+    });
+}
+
+/**
+ * Load data for specific tab
+ */
+async function loadTabData(tabName) {
+    try {
+        switch (tabName) {
+            case 'dashboard':
+                await loadDashboardData();
+                break;
+            case 'discord':
+                await loadDiscordData();
+                break;
+            case 'configuration':
+                await loadConfigurationData();
+                break;
+        }
+    } catch (error) {
+        console.error(`Error loading ${tabName} data:`, error);
+        showError(`Failed to load ${tabName} data: ` + error.message);
+    }
+}
+
+/**
+ * Load dashboard data
+ */
+async function loadDashboardData() {
+    try {
+        // Load sentiments and events in parallel
+        const [sentiments, events] = await Promise.all([
+            fetchAPI('/api/sentiments'),
+            fetchAPI('/api/events?limit=50')
+        ]);
+        
+        sentimentData = {};
+        sentiments.forEach(sentiment => {
+            sentimentData[sentiment.currency] = sentiment;
+        });
+        
+        eventsData = events;
+        
+        // Update UI
+        updateCurrentWeekDisplay();
+        updateCurrencySidebar();
+        updateCurrencySummary();
+        updateIndicatorsTable();
+        updateWeeklySummary();
+        updateSentimentChart();
+        
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        throw error;
+    }
+}
+
+/**
+ * Load Discord integration data
+ */
+async function loadDiscordData() {
+    try {
+        const status = await fetchAPI('/api/discord/test');
+        updateDiscordStatus(status);
+    } catch (error) {
+        console.error('Error loading Discord data:', error);
+        updateDiscordStatus({ status: 'error', message: error.message });
+    }
+}
+
+/**
+ * Load configuration data
+ */
+async function loadConfigurationData() {
+    try {
+        const config = await fetchAPI('/api/config');
+        updateConfigurationDisplay(config);
+    } catch (error) {
+        console.error('Error loading configuration data:', error);
+        showError('Failed to load configuration: ' + error.message);
+    }
+}
+
+/**
+ * Fetch data from API with authentication
+ */
+async function fetchAPI(endpoint, options = {}) {
+    const url = endpoint.startsWith('http') ? endpoint : (CONFIG.API_BASE_URL + endpoint);
+    
+    const defaultOptions = {
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    };
+    
+    const response = await fetch(url, { ...defaultOptions, ...options });
+    
+    if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+    
+    return response.json();
+}
+
+/**
+ * Update current week display
+ */
+function updateCurrentWeekDisplay() {
+    const currentWeekElement = document.getElementById('current-week');
+    if (currentWeekElement) {
+        const now = new Date();
+        const weekStart = new Date(now.setDate(now.getDate() - now.getDay() + 1));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        
+        const formatDate = (date) => date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        currentWeekElement.textContent = `Week of ${formatDate(weekStart)} - ${formatDate(weekEnd)}`;
+    }
+}
+
+/**
+ * Update currency sidebar
+ */
+function updateCurrencySidebar() {
+    const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
+    
+    currencies.forEach(currency => {
+        const sentimentElement = document.getElementById(`${currency.toLowerCase()}-sentiment`);
+        if (sentimentElement) {
+            const sentiment = sentimentData[currency];
+            if (sentiment) {
+                const sentimentClass = getSentimentClass(sentiment.final_sentiment);
+                sentimentElement.textContent = sentiment.final_sentiment;
+                sentimentElement.className = `ml-auto text-sm ${sentimentClass}`;
+            } else {
+                sentimentElement.textContent = 'N/A';
+                sentimentElement.className = 'ml-auto text-sm text-gray-400';
+            }
+        }
+    });
+}
+
+/**
+ * Update currency summary
+ */
+function updateCurrencySummary() {
+    const summaryElement = document.getElementById('currency-summary');
+    if (!summaryElement) return;
+    
+    const selectedCurrencyElement = document.getElementById('selected-currency');
+    if (selectedCurrencyElement) {
+        selectedCurrencyElement.textContent = currentCurrency;
+    }
+    
+    const sentiment = sentimentData[currentCurrency];
+    if (sentiment) {
+        const sentimentClass = getSentimentClass(sentiment.final_sentiment);
+        summaryElement.innerHTML = `
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                    <h3 class="font-semibold text-lg">${currentCurrency}</h3>
+                    <p class="text-gray-600">Current Sentiment</p>
+                </div>
+                <div class="text-right">
+                    <span class="text-2xl font-bold ${sentimentClass}">${sentiment.final_sentiment}</span>
+                    <p class="text-sm text-gray-500">${sentiment.events.length} events</p>
+                </div>
+            </div>
+            <div class="mt-4">
+                <h4 class="font-medium mb-2">Recent Events:</h4>
+                <div class="space-y-2">
+                    ${sentiment.events.slice(0, 3).map(event => `
+                        <div class="text-sm">
+                            <span class="font-medium">${event.event_name}</span>
+                            <span class="text-gray-500">- ${event.sentiment || 'Neutral'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    } else {
+        summaryElement.innerHTML = `
+            <div class="text-center text-gray-500">
+                <p>No sentiment data available for ${currentCurrency}</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Update indicators table
+ */
+function updateIndicatorsTable() {
+    const tableBody = document.getElementById('indicators-table');
+    if (!tableBody) return;
+    
+    const filteredEvents = eventsData.filter(event => 
+        !currentCurrency || event.currency === currentCurrency
+    );
+    
+    tableBody.innerHTML = filteredEvents.map(event => {
+        const sentiment = getSentimentFromValues(event.previous_value, event.forecast_value);
+        const sentimentClass = getSentimentClass(sentiment);
+        
+        return `
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-sm">${event.event_name}</td>
+                <td class="px-4 py-3 text-sm font-medium">${event.currency}</td>
+                <td class="px-4 py-3 text-sm">${formatValue(event.previous_value)}</td>
+                <td class="px-4 py-3 text-sm">${formatValue(event.forecast_value)}</td>
+                <td class="px-4 py-3 text-sm">
+                    <span class="${sentimentClass}">${sentiment}</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500">
+                    ${new Date(event.scheduled_datetime).toLocaleDateString()}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+/**
+ * Update weekly summary
+ */
+function updateWeeklySummary() {
+    const summaryElement = document.getElementById('weekly-summary');
+    if (!summaryElement) return;
+    
+    const currencies = Object.keys(sentimentData);
+    
+    summaryElement.innerHTML = currencies.map(currency => {
+        const sentiment = sentimentData[currency];
+        const sentimentClass = getSentimentClass(sentiment.final_sentiment);
+        
+        return `
+            <div class="bg-white p-4 rounded-lg shadow-sm border cursor-pointer hover:shadow-md transition-shadow"
+                 onclick="selectCurrency('${currency}')">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold text-lg">${currency}</h3>
+                    <span class="text-2xl">${getCurrencyFlag(currency)}</span>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm font-medium ${sentimentClass}">${sentiment.final_sentiment}</span>
+                    <p class="text-xs text-gray-500 mt-1">${sentiment.events.length} events analyzed</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Initialize sentiment chart
+ */
+function initializeSentimentChart() {
+    const ctx = document.getElementById('sentimentChart');
+    if (!ctx) return;
+    
+    if (sentimentChart) {
+        sentimentChart.destroy();
+    }
+    
+    sentimentChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Bullish', 'Bearish', 'Neutral'],
+            datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: ['#10b981', '#ef4444', '#6b7280'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+    
+    updateSentimentChart();
+}
+
+/**
+ * Update sentiment chart
+ */
+function updateSentimentChart() {
+    if (!sentimentChart) return;
+    
+    const currencies = Object.keys(sentimentData);
+    const sentimentCounts = { Bullish: 0, Bearish: 0, Neutral: 0 };
+    
+    currencies.forEach(currency => {
+        const sentiment = sentimentData[currency].final_sentiment;
+        if (sentiment.includes('Bullish')) {
+            sentimentCounts.Bullish++;
+        } else if (sentiment.includes('Bearish')) {
+            sentimentCounts.Bearish++;
+        } else {
+            sentimentCounts.Neutral++;
+        }
+    });
+    
+    sentimentChart.data.datasets[0].data = [
+        sentimentCounts.Bullish,
+        sentimentCounts.Bearish,
+        sentimentCounts.Neutral
+    ];
+    
+    sentimentChart.update();
+}
+
+/**
+ * Setup event listeners
+ */
+function setupEventListeners() {
+    // Currency selection
+    document.querySelectorAll('.currency-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const currency = this.getAttribute('data-currency');
+            selectCurrency(currency);
+        });
+    });
+    
+    // Discord integration buttons
+    const testWebhookBtn = document.getElementById('test-webhook');
+    if (testWebhookBtn) {
+        testWebhookBtn.addEventListener('click', testDiscordWebhook);
+    }
+    
+    const sendReportBtn = document.getElementById('send-report');
+    if (sendReportBtn) {
+        sendReportBtn.addEventListener('click', sendWeeklyReport);
+    }
+}
+
+/**
+ * Select currency
+ */
+function selectCurrency(currency) {
+    currentCurrency = currency;
+    
+    // Update active currency in sidebar
+    document.querySelectorAll('.currency-item').forEach(item => {
+        item.classList.remove('bg-blue-50', 'border-blue-200');
+        if (item.getAttribute('data-currency') === currency) {
+            item.classList.add('bg-blue-50', 'border-blue-200');
+        }
+    });
+    
+    // Update displays
+    updateCurrencySummary();
+    updateIndicatorsTable();
+}
+
+/**
+ * Test Discord webhook
+ */
+async function testDiscordWebhook() {
+    try {
+        showLoading(true);
+        const result = await fetchAPI('/api/discord/test', { method: 'POST' });
+        showSuccess('Discord webhook test completed: ' + result.message);
+        await loadDiscordData();
+    } catch (error) {
+        showError('Discord webhook test failed: ' + error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+/**
+ * Send weekly report
+ */
+async function sendWeeklyReport() {
+    try {
+        showLoading(true);
+        const result = await fetchAPI('/api/discord/send-report', { method: 'POST' });
+        showSuccess('Weekly report sent successfully: ' + result.message);
+    } catch (error) {
+        showError('Failed to send weekly report: ' + error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+/**
+ * Update Discord status display
+ */
+function updateDiscordStatus(status) {
+    const statusElement = document.getElementById('discord-status');
+    if (!statusElement) return;
+    
+    const statusClass = status.status === 'success' ? 'text-green-600' : 'text-red-600';
+    statusElement.innerHTML = `
+        <div class="flex items-center space-x-2">
+            <div class="w-3 h-3 rounded-full ${status.status === 'success' ? 'bg-green-400' : 'bg-red-400'}"></div>
+            <span class="${statusClass}">${status.message || status.status}</span>
+        </div>
+    `;
+}
+
+/**
+ * Update configuration display
+ */
+function updateConfigurationDisplay(config) {
+    const configElement = document.getElementById('config-settings');
+    if (!configElement) return;
+    
+    configElement.innerHTML = config.map(item => `
+        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div>
+                <h4 class="font-medium">${item.key}</h4>
+                <p class="text-sm text-gray-500">Last updated: ${new Date(item.updated_at).toLocaleDateString()}</p>
+            </div>
+            <div class="text-right">
+                <span class="text-sm font-mono bg-white px-2 py-1 rounded border">
+                    ${item.value.length > 50 ? item.value.substring(0, 50) + '...' : item.value}
+                </span>
+            </div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Utility functions
+ */
+
+function getSentimentClass(sentiment) {
+    if (sentiment.includes('Bullish')) return 'sentiment-bullish';
+    if (sentiment.includes('Bearish')) return 'sentiment-bearish';
+    return 'sentiment-neutral';
+}
+
+function getSentimentFromValues(previous, forecast) {
+    if (!previous || !forecast) return 'Neutral';
+    if (forecast > previous) return 'Bullish';
+    if (forecast < previous) return 'Bearish';
+    return 'Neutral';
+}
+
+function formatValue(value) {
+    if (value === null || value === undefined) return 'N/A';
+    return typeof value === 'number' ? value.toFixed(2) : value;
+}
+
+function getCurrencyFlag(currency) {
+    const flags = {
+        'USD': '🇺🇸', 'EUR': '🇪🇺', 'GBP': '🇬🇧', 'JPY': '🇯🇵',
+        'AUD': '🇦🇺', 'CAD': '🇨🇦', 'CHF': '🇨🇭', 'NZD': '🇳🇿',
+        'CNY': '🇨🇳'
+    };
+    return flags[currency] || '🏳️';
+}
+
+function showLoading(show) {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.classList.toggle('hidden', !show);
+    }
+}
+
+function showSuccess(message) {
+    showNotification(message, 'success');
+}
+
+function showError(message) {
+    showNotification(message, 'error');
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+    }`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 5000);
+} 

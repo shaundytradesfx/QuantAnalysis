@@ -48,12 +48,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware
+# Add CORS middleware for Firebase frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=[
+        "https://forex-sentiment-frontend.web.app",
+        "https://forex-sentiment-frontend.firebaseapp.com",
+        "http://localhost:3000",  # For local development
+        "http://127.0.0.1:3000",  # For local development
+        "*"  # Allow all origins for development (remove in production)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

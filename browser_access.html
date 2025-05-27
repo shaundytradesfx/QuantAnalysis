@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Sentiment Analyzer - Browser Access</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid #28a745;
+        }
+        .form-group {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 120px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        .btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            min-width: 150px;
+        }
+        .btn:hover {
+            background: #218838;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        .btn-primary {
+            background: #007bff;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        .code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: center;
+            font-weight: bold;
+        }
+        .success { background: rgba(40, 167, 69, 0.3); }
+        .error { background: rgba(220, 53, 69, 0.3); }
+        .loading { background: rgba(255, 193, 7, 0.3); }
+        .warning { background: rgba(255, 193, 7, 0.3); }
+        .dashboard-frame {
+            width: 100%;
+            height: 600px;
+            border: none;
+            border-radius: 10px;
+            background: white;
+            margin-top: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Forex Sentiment Analyzer</h1>
+            <p>Enterprise Economic Analysis Dashboard - Browser Access</p>
+        </div>
+
+        <div id="auth-section">
+            <div class="step">
+                <h3>🔐 Step 1: Get Your Authentication Token</h3>
+                <p>Run this command in your terminal to get your Google Cloud identity token:</p>
+                <div class="code">gcloud auth print-identity-token</div>
+                <button class="btn btn-secondary" onclick="copyToClipboard('gcloud auth print-identity-token')">📋 Copy Command</button>
+            </div>
+
+            <div class="step">
+                <h3>🎯 Step 2: Enter Your Token</h3>
+                <div class="form-group">
+                    <label for="token">Paste your identity token here:</label>
+                    <textarea id="token" placeholder="Paste your Google Cloud identity token here..."></textarea>
+                </div>
+                <button class="btn" onclick="testConnection()">🔍 Test Connection</button>
+                <button class="btn btn-primary" onclick="openDashboard()">🚀 Open Dashboard</button>
+            </div>
+
+            <div id="status"></div>
+        </div>
+
+        <div id="dashboard-section" class="hidden">
+            <div class="step">
+                <h3>✅ Dashboard Access</h3>
+                <p>Your dashboard is now accessible! Use the buttons below to interact with your system:</p>
+                
+                <button class="btn" onclick="refreshDashboard()">🔄 Refresh Dashboard</button>
+                <button class="btn btn-secondary" onclick="testAPI()">🔍 Test API</button>
+                <button class="btn btn-primary" onclick="openInNewTab()">🌐 Open in New Tab</button>
+                <button class="btn" onclick="logout()">🚪 Logout</button>
+            </div>
+
+            <div id="api-status"></div>
+            
+            <iframe id="dashboard-frame" class="dashboard-frame" src="about:blank"></iframe>
+        </div>
+
+        <div class="step">
+            <h3>📋 Alternative Access Methods</h3>
+            <p><strong>Command Line Access:</strong></p>
+            <div class="code">./open_dashboard.sh</div>
+            
+            <p><strong>Direct API Testing:</strong></p>
+            <div class="code">curl -H "Authorization: Bearer YOUR_TOKEN" https://forex-sentiment-analyzer-158616853756.us-central1.run.app/api/health</div>
+            
+            <p><strong>Service URL:</strong></p>
+            <div class="code">https://forex-sentiment-analyzer-158616853756.us-central1.run.app</div>
+        </div>
+    </div>
+
+    <script>
+        const SERVICE_URL = 'https://forex-sentiment-analyzer-158616853756.us-central1.run.app';
+        let currentToken = '';
+
+        function showStatus(message, type, elementId = 'status') {
+            const status = document.getElementById(elementId);
+            status.innerHTML = message;
+            status.className = `status ${type}`;
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                showStatus('✅ Command copied to clipboard!', 'success');
+            }, function(err) {
+                showStatus('❌ Could not copy to clipboard. Please copy manually.', 'error');
+            });
+        }
+
+        async function testConnection() {
+            const token = document.getElementById('token').value.trim();
+            if (!token) {
+                showStatus('❌ Please enter your token first', 'error');
+                return;
+            }
+
+            currentToken = token;
+            showStatus('🔍 Testing connection...', 'loading');
+
+            try {
+                const response = await fetch(`${SERVICE_URL}/api/health`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus(`✅ Connection successful! Status: ${data.status}`, 'success');
+                    return true;
+                } else {
+                    showStatus(`❌ Connection failed: ${response.status} ${response.statusText}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                showStatus(`❌ Connection error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function openDashboard() {
+            const token = document.getElementById('token').value.trim();
+            if (!token) {
+                showStatus('❌ Please enter your token first', 'error');
+                return;
+            }
+
+            // Test connection first
+            const connected = await testConnection();
+            if (!connected) {
+                return;
+            }
+
+            currentToken = token;
+            
+            // Store token for session
+            sessionStorage.setItem('authToken', token);
+            
+            // Show dashboard section
+            document.getElementById('auth-section').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+            
+            // Load dashboard in iframe with authentication
+            loadDashboardFrame();
+        }
+
+        function loadDashboardFrame() {
+            const iframe = document.getElementById('dashboard-frame');
+            
+            // Create a simple loading page
+            const dashboardHTML = '<!DOCTYPE html><html><head><title>Loading Dashboard...</title></head>' +
+                '<body style="font-family:Arial;text-align:center;padding:50px;background:#f8f9fa;">' +
+                '<h2>🔄 Loading Dashboard...</h2>' +
+                '<p>Testing connection to your Forex Sentiment Dashboard...</p>' +
+                '<div id="status">Connecting...</div>' +
+                '<script>' +
+                'setTimeout(function(){' +
+                'document.getElementById("status").innerHTML="✅ Ready! Click Open in New Tab to access your dashboard.";' +
+                '},1000);' +
+                '</script></body></html>';
+            
+            iframe.src = 'data:text/html;charset=utf-8,' + encodeURIComponent(dashboardHTML);
+        }
+
+        function refreshDashboard() {
+            if (currentToken) {
+                loadDashboardFrame();
+                showStatus('🔄 Dashboard refreshed', 'success', 'api-status');
+            }
+        }
+
+        async function testAPI() {
+            if (!currentToken) {
+                showStatus('❌ No token available', 'error', 'api-status');
+                return;
+            }
+
+            showStatus('🔍 Testing API endpoints...', 'loading', 'api-status');
+
+            try {
+                const endpoints = [
+                    { name: 'Health', url: '/api/health' },
+                    { name: 'Sentiments', url: '/api/sentiments' },
+                    { name: 'Events', url: '/api/events' }
+                ];
+
+                let results = [];
+                
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await fetch(`${SERVICE_URL}${endpoint.url}`, {
+                            headers: {
+                                'Authorization': `Bearer ${currentToken}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            results.push(`✅ ${endpoint.name}: OK`);
+                        } else {
+                            results.push(`❌ ${endpoint.name}: ${response.status}`);
+                        }
+                    } catch (error) {
+                        results.push(`❌ ${endpoint.name}: Error`);
+                    }
+                }
+
+                showStatus(`API Test Results:<br>${results.join('<br>')}`, 'success', 'api-status');
+            } catch (error) {
+                showStatus(`❌ API test failed: ${error.message}`, 'error', 'api-status');
+            }
+        }
+
+        function openInNewTab() {
+            if (currentToken) {
+                const url = `${SERVICE_URL}/?token=${encodeURIComponent(currentToken)}`;
+                window.open(url, '_blank');
+                showStatus('🌐 Dashboard opened in new tab', 'success', 'api-status');
+            } else {
+                showStatus('❌ No token available', 'error', 'api-status');
+            }
+        }
+
+        function logout() {
+            currentToken = '';
+            sessionStorage.removeItem('authToken');
+            document.getElementById('token').value = '';
+            document.getElementById('auth-section').classList.remove('hidden');
+            document.getElementById('dashboard-section').classList.add('hidden');
+            showStatus('🚪 Logged out successfully', 'success');
+        }
+
+        // Check if we already have a token
+        window.onload = function() {
+            const token = sessionStorage.getItem('authToken');
+            if (token) {
+                document.getElementById('token').value = token;
+                showStatus('✅ Token found in session', 'success');
+            }
+        };
+    </script>
+</body>
+</html> 

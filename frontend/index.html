@@ -245,5 +245,54 @@
     </div>
 
     <script src="static/js/dashboard.js?v=20250526220000"></script>
+    <script>
+        // Authentication handling
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAuthenticated = urlParams.get('authenticated') === 'true';
+        let authToken = sessionStorage.getItem('authToken');
+        
+        // If coming from authentication page, we should have a token
+        if (isAuthenticated && !authToken) {
+            authToken = localStorage.getItem('gcloud_token');
+            if (authToken) {
+                sessionStorage.setItem('authToken', authToken);
+            }
+        }
+        
+        if (!authToken && !isAuthenticated) {
+            // Redirect to authentication page if no token
+            window.location.href = '/auth';
+        } else if (authToken) {
+            // Set up authenticated fetch for all API calls
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options = {}) {
+                if (url.startsWith('/api/')) {
+                    options.headers = options.headers || {};
+                    options.headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                return originalFetch(url, options);
+            };
+            
+            // Add logout functionality
+            window.logout = function() {
+                sessionStorage.removeItem('authToken');
+                localStorage.removeItem('gcloud_token');
+                window.location.href = '/';
+            };
+            
+            // Add logout button to header
+            const headerActions = document.querySelector('#health-status').parentElement;
+            const logoutBtn = document.createElement('button');
+            logoutBtn.innerHTML = '🚪 Logout';
+            logoutBtn.className = 'text-sm bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded';
+            logoutBtn.onclick = logout;
+            headerActions.appendChild(logoutBtn);
+            
+            // Clean up URL if we came from authentication
+            if (isAuthenticated) {
+                window.history.replaceState({}, document.title, '/');
+            }
+        }
+    </script>
 </body>
 </html> 

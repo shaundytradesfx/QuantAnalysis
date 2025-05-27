@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Sentiment Analyzer - Browser Access Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .step {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 10px 0;
+            word-break: break-all;
+            position: relative;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .copy-btn:hover {
+            background: #218838;
+        }
+        .btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background: #218838;
+        }
+        .btn-primary {
+            background: #007bff;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        .success { background: rgba(40, 167, 69, 0.3); }
+        .error { background: rgba(220, 53, 69, 0.3); }
+        .warning { background: rgba(255, 193, 7, 0.3); color: #212529; }
+        .info { background: rgba(23, 162, 184, 0.3); }
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-size: 14px;
+            box-sizing: border-box;
+            height: 120px;
+            resize: vertical;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Forex Sentiment Analyzer</h1>
+            <h2>🚀 Browser Access Tool</h2>
+            <p>Seamless access to your economic analysis dashboard</p>
+        </div>
+
+        <!-- Step 1: Get Token -->
+        <div class="step">
+            <h3>Step 1: Get Your Authentication Token</h3>
+            <p>Copy and run this command in your terminal:</p>
+            <div class="code">
+                gcloud auth print-identity-token
+                <button class="copy-btn" onclick="copyToClipboard('gcloud auth print-identity-token')">Copy</button>
+            </div>
+            <p>Then paste the token below:</p>
+            <textarea id="token-input" placeholder="Paste your Google Cloud identity token here..."></textarea>
+            <button class="btn" onclick="testToken()">🔍 Test Token</button>
+            <button class="btn btn-primary" onclick="saveToken()">💾 Save Token</button>
+        </div>
+
+        <!-- Step 2: Test Connection -->
+        <div class="step">
+            <h3>Step 2: Test API Connection</h3>
+            <button class="btn btn-warning" onclick="testConnection()">🔗 Test Connection</button>
+            <div id="connection-status"></div>
+        </div>
+
+        <!-- Step 3: Access Dashboard -->
+        <div class="step">
+            <h3>Step 3: Access Your Dashboard</h3>
+            <button class="btn btn-primary" onclick="openDashboard()" id="dashboard-btn" disabled>
+                🎯 Open Dashboard
+            </button>
+            <p><small>This will open the dashboard in a new tab with automatic authentication</small></p>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="status-messages"></div>
+
+        <!-- Quick Actions -->
+        <div class="step">
+            <h3>🛠️ Quick Actions</h3>
+            <button class="btn" onclick="runScraper()">📊 Run Scraper</button>
+            <button class="btn" onclick="runAnalysis()">🧠 Run Analysis</button>
+            <button class="btn" onclick="sendDiscordReport()">📢 Send Discord Report</button>
+            <button class="btn" onclick="checkHealth()">❤️ Health Check</button>
+        </div>
+
+        <!-- Instructions -->
+        <div class="step">
+            <h3>📋 Instructions</h3>
+            <ol>
+                <li><strong>First time setup:</strong> Run the gcloud command above to get your token</li>
+                <li><strong>Test connection:</strong> Verify your token works with the API</li>
+                <li><strong>Access dashboard:</strong> Click "Open Dashboard" to access the full interface</li>
+                <li><strong>Bookmark this page:</strong> For easy future access</li>
+            </ol>
+            
+            <div class="info status">
+                <strong>💡 Pro Tip:</strong> Your token will be saved in your browser for convenience. 
+                If you get authentication errors, just refresh this page and get a new token.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://forex-sentiment-analyzer-158616853756.us-central1.run.app';
+        let currentToken = localStorage.getItem('gcloud_token') || '';
+
+        // Load saved token on page load
+        window.onload = function() {
+            if (currentToken) {
+                document.getElementById('token-input').value = currentToken;
+                showStatus('Token loaded from storage', 'info');
+                document.getElementById('dashboard-btn').disabled = false;
+            }
+        };
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus('Command copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy. Please copy manually.', 'error');
+            });
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status-messages');
+            const statusEl = document.createElement('div');
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = message;
+            statusDiv.appendChild(statusEl);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                statusEl.remove();
+            }, 5000);
+        }
+
+        function testToken() {
+            const token = document.getElementById('token-input').value.trim();
+            if (!token) {
+                showStatus('Please enter a token first', 'error');
+                return;
+            }
+
+            showStatus('Testing token...', 'info');
+            
+            fetch(`${API_BASE}/api/health`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    showStatus('✅ Token is valid!', 'success');
+                    currentToken = token;
+                    document.getElementById('dashboard-btn').disabled = false;
+                } else {
+                    showStatus(`❌ Token test failed: ${response.status}`, 'error');
+                }
+            })
+            .catch(error => {
+                showStatus(`❌ Connection error: ${error.message}`, 'error');
+            });
+        }
+
+        function saveToken() {
+            const token = document.getElementById('token-input').value.trim();
+            if (!token) {
+                showStatus('Please enter a token first', 'error');
+                return;
+            }
+
+            localStorage.setItem('gcloud_token', token);
+            sessionStorage.setItem('authToken', token);
+            currentToken = token;
+            showStatus('💾 Token saved successfully!', 'success');
+            document.getElementById('dashboard-btn').disabled = false;
+        }
+
+        function testConnection() {
+            if (!currentToken) {
+                showStatus('Please save a token first', 'error');
+                return;
+            }
+
+            showStatus('Testing connection...', 'info');
+            
+            fetch(`${API_BASE}/api/health`, {
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('connection-status').innerHTML = `
+                    <div class="status success">
+                        <strong>✅ Connection Successful!</strong><br>
+                        Status: ${data.status}<br>
+                        Database: ${data.database}<br>
+                        Discord: ${data.discord}
+                    </div>
+                `;
+            })
+            .catch(error => {
+                document.getElementById('connection-status').innerHTML = `
+                    <div class="status error">
+                        <strong>❌ Connection Failed!</strong><br>
+                        Error: ${error.message}
+                    </div>
+                `;
+            });
+        }
+
+        function openDashboard() {
+            if (!currentToken) {
+                showStatus('Please save a token first', 'error');
+                return;
+            }
+
+            // Store token for the dashboard
+            sessionStorage.setItem('authToken', currentToken);
+            localStorage.setItem('gcloud_token', currentToken);
+            
+            // Open dashboard in new tab
+            const dashboardUrl = `${API_BASE}/?authenticated=true`;
+            window.open(dashboardUrl, '_blank');
+            showStatus('🎯 Dashboard opened in new tab!', 'success');
+        }
+
+        function runScraper() {
+            if (!currentToken) {
+                showStatus('Please save a token first', 'error');
+                return;
+            }
+
+            showStatus('🔄 Running scraper...', 'info');
+            
+            fetch(`${API_BASE}/api/cron/scrape`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showStatus('✅ Scraper completed successfully!', 'success');
+                } else {
+                    showStatus(`❌ Scraper failed: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                showStatus(`❌ Scraper error: ${error.message}`, 'error');
+            });
+        }
+
+        function runAnalysis() {
+            if (!currentToken) {
+                showStatus('Please save a token first', 'error');
+                return;
+            }
+
+            showStatus('🔄 Running analysis...', 'info');
+            
+            fetch(`${API_BASE}/api/cron/analyze`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showStatus('✅ Analysis completed successfully!', 'success');
+                } else {
+                    showStatus(`❌ Analysis failed: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                showStatus(`❌ Analysis error: ${error.message}`, 'error');
+            });
+        }
+
+        function sendDiscordReport() {
+            if (!currentToken) {
+                showStatus('Please save a token first', 'error');
+                return;
+            }
+
+            showStatus('🔄 Sending Discord report...', 'info');
+            
+            fetch(`${API_BASE}/api/cron/notify`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showStatus('✅ Discord report sent successfully!', 'success');
+                } else {
+                    showStatus(`❌ Discord report failed: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                showStatus(`❌ Discord error: ${error.message}`, 'error');
+            });
+        }
+
+        function checkHealth() {
+            if (!currentToken) {
+                showStatus('Please save a token first', 'error');
+                return;
+            }
+
+            showStatus('🔄 Checking system health...', 'info');
+            
+            fetch(`${API_BASE}/api/health`, {
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                showStatus(`❤️ System Health: ${data.status} | DB: ${data.database} | Discord: ${data.discord}`, 'success');
+            })
+            .catch(error => {
+                showStatus(`❌ Health check failed: ${error.message}`, 'error');
+            });
+        }
+    </script>
+</body>
+</html> 

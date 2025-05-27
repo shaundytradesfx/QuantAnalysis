@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Sentiment Analyzer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .healthy { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .loading { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .btn:hover { background-color: #0056b3; }
+        .data-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .currency-item {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 3px;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Forex Sentiment Analyzer</h1>
+            <p>Real-time economic sentiment analysis for major currencies</p>
+        </div>
+
+        <div id="auth-section">
+            <h3>🔐 Authentication Required</h3>
+            <p>This application requires authentication to access. Please enter your Google Cloud identity token:</p>
+            <input type="password" id="token-input" placeholder="Paste your identity token here..." style="width: 100%; padding: 10px; margin: 10px 0;">
+            <button class="btn" onclick="setToken()">Set Token</button>
+            <button class="btn" onclick="getTokenInstructions()">How to get token?</button>
+            
+            <div id="token-instructions" style="display: none; margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 5px;">
+                <h4>How to get your authentication token:</h4>
+                <ol>
+                    <li>Open your terminal/command prompt</li>
+                    <li>Make sure you're logged into Google Cloud: <code>gcloud auth login</code></li>
+                    <li>Get your identity token: <code>gcloud auth print-identity-token</code></li>
+                    <li>Copy the token and paste it in the field above</li>
+                </ol>
+            </div>
+        </div>
+
+        <div id="app-section" style="display: none;">
+            <div class="status" id="status">
+                <div class="loading">🔄 Loading application status...</div>
+            </div>
+
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn" onclick="checkHealth()">🏥 Check Health</button>
+                <button class="btn" onclick="runScraper()">🔍 Run Scraper</button>
+                <button class="btn" onclick="runAnalysis()">📈 Run Analysis</button>
+                <button class="btn" onclick="sendNotification()">📢 Send Discord</button>
+            </div>
+
+            <div class="data-section">
+                <h3>📊 Current Sentiments</h3>
+                <div id="sentiments-data">Click "Run Analysis" to see current sentiment data</div>
+            </div>
+
+            <div class="data-section">
+                <h3>📅 Recent Events</h3>
+                <div id="events-data">Click "Run Scraper" to see recent economic events</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://forex-sentiment-analyzer-158616853756.us-central1.run.app';
+        let authToken = '';
+
+        function setToken() {
+            authToken = document.getElementById('token-input').value.trim();
+            if (authToken) {
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('app-section').style.display = 'block';
+                checkHealth();
+            } else {
+                alert('Please enter a valid token');
+            }
+        }
+
+        function getTokenInstructions() {
+            const instructions = document.getElementById('token-instructions');
+            instructions.style.display = instructions.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function makeAuthenticatedRequest(endpoint, method = 'GET') {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: method,
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error('Authentication failed. Please check your token.');
+                }
+
+                return await response.json();
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function checkHealth() {
+            updateStatus('loading', '🔄 Checking system health...');
+            try {
+                const health = await makeAuthenticatedRequest('/api/health');
+                const statusClass = health.status === 'healthy' ? 'healthy' : 'error';
+                updateStatus(statusClass, `
+                    <strong>System Status:</strong> ${health.status}<br>
+                    <strong>Database:</strong> ${health.database}<br>
+                    <strong>Discord:</strong> ${health.discord}<br>
+                    <strong>Last Scrape:</strong> ${health.last_scrape || 'Never'}<br>
+                    <strong>Last Analysis:</strong> ${health.last_analysis || 'Never'}
+                `);
+            } catch (error) {
+                updateStatus('error', `❌ Health check failed: ${error.message}`);
+            }
+        }
+
+        async function runScraper() {
+            updateStatus('loading', '🔄 Running scraper...');
+            try {
+                const result = await makeAuthenticatedRequest('/api/cron/scrape', 'POST');
+                updateStatus('healthy', `✅ Scraper completed: ${result.message}`);
+                
+                // Load events data
+                const events = await makeAuthenticatedRequest('/api/events');
+                displayEvents(events);
+            } catch (error) {
+                updateStatus('error', `❌ Scraper failed: ${error.message}`);
+            }
+        }
+
+        async function runAnalysis() {
+            updateStatus('loading', '🔄 Running sentiment analysis...');
+            try {
+                const result = await makeAuthenticatedRequest('/api/cron/analyze', 'POST');
+                updateStatus('healthy', `✅ Analysis completed: ${result.message}`);
+                
+                // Load sentiments data
+                const sentiments = await makeAuthenticatedRequest('/api/sentiments');
+                displaySentiments(sentiments);
+            } catch (error) {
+                updateStatus('error', `❌ Analysis failed: ${error.message}`);
+            }
+        }
+
+        async function sendNotification() {
+            updateStatus('loading', '🔄 Sending Discord notification...');
+            try {
+                const result = await makeAuthenticatedRequest('/api/cron/notify', 'POST');
+                updateStatus('healthy', `✅ Notification sent: ${result.message}`);
+            } catch (error) {
+                updateStatus('error', `❌ Notification failed: ${error.message}`);
+            }
+        }
+
+        function updateStatus(className, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${className}`;
+            statusDiv.innerHTML = message;
+        }
+
+        function displaySentiments(sentiments) {
+            const container = document.getElementById('sentiments-data');
+            if (!sentiments || sentiments.length === 0) {
+                container.innerHTML = '<p>No sentiment data available. Run the analysis first.</p>';
+                return;
+            }
+
+            let html = '';
+            sentiments.forEach(sentiment => {
+                const emoji = sentiment.final_sentiment.includes('Bullish') ? '🟢' : 
+                             sentiment.final_sentiment.includes('Bearish') ? '🔴' : '⚪';
+                html += `
+                    <div class="currency-item">
+                        <strong>${sentiment.currency}</strong> ${emoji} ${sentiment.final_sentiment}
+                        <br><small>Events: ${sentiment.events.length} | Week: ${sentiment.week_start}</small>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function displayEvents(events) {
+            const container = document.getElementById('events-data');
+            if (!events || events.length === 0) {
+                container.innerHTML = '<p>No events data available. Run the scraper first.</p>';
+                return;
+            }
+
+            let html = `<p><strong>Total Events:</strong> ${events.length}</p>`;
+            events.slice(0, 10).forEach(event => {
+                html += `
+                    <div class="currency-item">
+                        <strong>${event.currency}</strong> - ${event.event_name}
+                        <br><small>Date: ${new Date(event.scheduled_datetime).toLocaleString()}</small>
+                        <br><small>Impact: ${event.impact_level}</small>
+                    </div>
+                `;
+            });
+            if (events.length > 10) {
+                html += `<p><em>... and ${events.length - 10} more events</em></p>`;
+            }
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+</html> 

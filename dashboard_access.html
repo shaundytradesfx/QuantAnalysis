@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Sentiment Dashboard Access</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .code {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .warning {
+            color: #ffc107;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Forex Sentiment Dashboard</h1>
+            <p>Your enterprise-grade economic sentiment analysis platform</p>
+        </div>
+
+        <div class="step">
+            <h3>🔐 Step 1: Get Authentication Token</h3>
+            <p>Run this command in your terminal:</p>
+            <div class="code">gcloud auth print-identity-token</div>
+            <button class="btn" onclick="copyToClipboard('gcloud auth print-identity-token')">Copy Command</button>
+        </div>
+
+        <div class="step">
+            <h3>🌐 Step 2: Access Your Dashboard</h3>
+            <p>Your dashboard URL:</p>
+            <div class="code">https://forex-sentiment-analyzer-158616853756.us-central1.run.app</div>
+            <a href="https://forex-sentiment-analyzer-158616853756.us-central1.run.app" target="_blank" class="btn">Open Dashboard</a>
+        </div>
+
+        <div class="step">
+            <h3>🔧 Step 3: Test API Access</h3>
+            <p>Test your connection with this curl command (replace TOKEN with your actual token):</p>
+            <div class="code">curl -H "Authorization: Bearer TOKEN" https://forex-sentiment-analyzer-158616853756.us-central1.run.app/api/health</div>
+        </div>
+
+        <div class="step">
+            <h3>🚀 Quick Access Script</h3>
+            <p>For convenience, run this script from your project directory:</p>
+            <div class="code">./open_dashboard.sh</div>
+            <p class="success">✅ This script will automatically get your token and test the connection!</p>
+        </div>
+
+        <div class="step">
+            <h3>📋 Dashboard Features</h3>
+            <ul>
+                <li><strong>Real-time Sentiment Analysis</strong> - Live economic sentiment tracking</li>
+                <li><strong>Interactive Charts</strong> - Beautiful visualizations with Chart.js</li>
+                <li><strong>Currency Filtering</strong> - Focus on specific currencies (USD, EUR, GBP, etc.)</li>
+                <li><strong>Discord Integration</strong> - Send reports to your trading channels</li>
+                <li><strong>Configuration Management</strong> - Adjust settings and thresholds</li>
+                <li><strong>Economic Events Table</strong> - Detailed view of all indicators</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>⚠️ Organization Security</h3>
+            <p class="warning">Note: Your organization has security policies that require authentication for Cloud Run services. This is a best practice for enterprise environments.</p>
+        </div>
+    </div>
+
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                alert('Command copied to clipboard!');
+            }, function(err) {
+                console.error('Could not copy text: ', err);
+            });
+        }
+    </script>
+</body>
+</html> 

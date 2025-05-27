@@ -284,6 +284,66 @@ async def send_weekly_report():
         logger.error(f"Error sending weekly report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Cron endpoints for Cloud Scheduler
+@app.post("/api/cron/scrape")
+async def cron_scrape():
+    """Cron endpoint for running the scraper (triggered by Cloud Scheduler)."""
+    try:
+        from src.run_scraper import run_scraper
+        
+        logger.info("Cron job: Starting scraper...")
+        result = run_scraper()
+        
+        if result == 0:
+            return {"status": "success", "message": "Scraper completed successfully"}
+        else:
+            return {"status": "error", "message": "Scraper failed", "exit_code": result}
+    except Exception as e:
+        logger.error(f"Cron scraper error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/cron/analyze")
+async def cron_analyze():
+    """Cron endpoint for running sentiment analysis (triggered by Cloud Scheduler)."""
+    try:
+        from src.run_analysis import run_analysis
+        
+        logger.info("Cron job: Starting sentiment analysis...")
+        result = run_analysis()
+        
+        if result == 0:
+            return {"status": "success", "message": "Analysis completed successfully"}
+        else:
+            return {"status": "error", "message": "Analysis failed", "exit_code": result}
+    except Exception as e:
+        logger.error(f"Cron analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/cron/notify")
+async def cron_notify():
+    """Cron endpoint for sending Discord notifications (triggered by Cloud Scheduler)."""
+    try:
+        from src.analysis.sentiment_engine import SentimentCalculator
+        
+        logger.info("Cron job: Starting Discord notification...")
+        
+        # Get sentiment data for current week
+        with SentimentCalculator() as calculator:
+            sentiments = calculator.calculate_weekly_sentiments()
+            week_start, _ = calculator.get_current_week_bounds()
+        
+        # Send Discord notification
+        notifier = DiscordNotifier()
+        success = notifier.send_weekly_report(sentiments, week_start)
+        
+        if success:
+            return {"status": "success", "message": "Discord notification sent successfully"}
+        else:
+            return {"status": "error", "message": "Failed to send Discord notification"}
+    except Exception as e:
+        logger.error(f"Cron notification error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 def run_server(host: str = "127.0.0.1", port: int = 8000, reload: bool = True):
     """Run the FastAPI server."""
     logger.info(f"Starting FastAPI server on {host}:{port}")

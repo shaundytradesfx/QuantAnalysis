@@ -1,0 +1,75 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: forex-sentiment-analyzer
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # Set CPU allocation and concurrency
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/execution-environment: gen2
+        # Timeout for requests (max 60 minutes for Cloud Run)
+        run.googleapis.com/timeout: "3600s"
+    spec:
+      # Allow up to 100 concurrent requests per instance
+      containerConcurrency: 100
+      # Timeout for container startup
+      timeoutSeconds: 3600
+      containers:
+      - image: gcr.io/PROJECT_ID/forex-sentiment-analyzer
+        ports:
+        - containerPort: 8080
+        env:
+        # Database configuration
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: forex-sentiment-secrets
+              key: DATABASE_URL
+        # Discord configuration
+        - name: DISCORD_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: forex-sentiment-secrets
+              key: DISCORD_WEBHOOK_URL
+        - name: DISCORD_HEALTH_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: forex-sentiment-secrets
+              key: DISCORD_HEALTH_WEBHOOK_URL
+        # Application configuration
+        - name: FOREX_FACTORY_API_URL
+          value: "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: PORT
+          value: "8080"
+        resources:
+          limits:
+            # Use minimum resources for free tier
+            cpu: "1000m"
+            memory: "512Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        # Health check configuration
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3 

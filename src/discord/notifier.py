@@ -110,16 +110,15 @@ class DiscordNotifier:
         message_parts = [
             header,
             "\n".join(currency_sections),
-            "\n**📈 Net Summary:**",
-            "\n".join([f"• {item}" for item in net_summary]),
-            f"\n\n_Generated automatically by EconSentimentBot. Next run: {self._get_next_monday(week_start).strftime('%B %d, %Y')} at 06:00 UTC_"
+            "\n**📈 Summary:** " + " | ".join(net_summary),
+            f"\n_Next run: {self._get_next_monday(week_start).strftime('%b %d')} 06:00 UTC_"
         ]
         
         return "\n".join(message_parts)
     
     def _format_currency_section(self, currency: str, sentiment_data: Dict[str, Any]) -> tuple:
         """
-        Format a single currency's sentiment section with events grouped by date.
+        Format a single currency's sentiment section in a concise format.
         
         Args:
             currency (str): Currency code
@@ -129,114 +128,46 @@ class DiscordNotifier:
             tuple: (formatted_section, summary_line)
         """
         events = sentiment_data.get("events", [])
-        resolution = sentiment_data.get("resolution", {})
+        final_sentiment = sentiment_data.get("final_sentiment", "Neutral")
         
         # Currency header with flag emoji
         flag_emoji = self._get_flag_emoji(currency)
-        section_header = f"**{flag_emoji} {currency}**"
-        
-        # Group events by date
-        events_by_date = {}
-        for event in events:
-            # Get the scheduled datetime from the original event data
-            # We need to access this from the sentiment_data structure
-            event_date = None
-            
-            # Try to get date from various possible sources
-            if 'scheduled_datetime' in event:
-                if isinstance(event['scheduled_datetime'], str):
-                    from datetime import datetime
-                    try:
-                        event_date = datetime.fromisoformat(event['scheduled_datetime'].replace('Z', '+00:00')).date()
-                    except:
-                        event_date = None
-                elif hasattr(event['scheduled_datetime'], 'date'):
-                    event_date = event['scheduled_datetime'].date()
-                elif hasattr(event['scheduled_datetime'], 'strftime'):
-                    event_date = event['scheduled_datetime'].date()
-            
-            # If we can't get the date, use a default grouping
-            if event_date is None:
-                event_date = "Unknown Date"
-            
-            if event_date not in events_by_date:
-                events_by_date[event_date] = []
-            events_by_date[event_date].append(event)
-        
-        # Sort dates chronologically
-        sorted_dates = sorted([d for d in events_by_date.keys() if d != "Unknown Date"])
-        if "Unknown Date" in events_by_date:
-            sorted_dates.append("Unknown Date")
-        
-        # Format events grouped by date
-        event_lines = []
-        event_counter = 1
-        
-        for event_date in sorted_dates:
-            date_events = events_by_date[event_date]
-            
-            # Add date header if we have multiple dates
-            if len(sorted_dates) > 1:
-                if event_date == "Unknown Date":
-                    event_lines.append(f"📅 **Date TBD:**")
-                else:
-                    event_lines.append(f"📅 **{event_date.strftime('%B %d, %Y')}:**")
-            
-            # Format events for this date
-            for event in date_events:
-                if event.get("data_available", True):
-                    # Use correct field names and handle None values
-                    prev = event.get("previous_value")
-                    forecast = event.get("forecast_value")
-                    sentiment_label = event.get("sentiment_label", "Neutral")
-                    event_name = event.get("event_name", "Unknown Event")
-                    
-                    # Format numeric values, converting None to "N/A"
-                    if prev is None:
-                        prev_str = "N/A"
-                    elif isinstance(prev, (int, float)):
-                        prev_str = f"{prev:.2f}"
-                    else:
-                        prev_str = str(prev)
-                    
-                    if forecast is None:
-                        forecast_str = "N/A"
-                    elif isinstance(forecast, (int, float)):
-                        forecast_str = f"{forecast:.2f}"
-                    else:
-                        forecast_str = str(forecast)
-                    
-                    # Sentiment emoji
-                    sentiment_emoji = self._get_sentiment_emoji(sentiment_label)
-                    
-                    # Add indicator type info if it's an inverse indicator
-                    indicator_info = ""
-                    if event.get("is_inverse", False):
-                        indicator_info = " (inverse)"
-                    
-                    event_lines.append(
-                        f"   {event_counter}. {event_name}{indicator_info}: Prev={prev_str}, Forecast={forecast_str} → {sentiment_emoji} {sentiment_label}"
-                    )
-                else:
-                    event_name = event.get("event_name", "Unknown Event")
-                    event_lines.append(f"   {event_counter}. {event_name}: Data Unavailable → ⚪ Neutral")
-                
-                event_counter += 1
-            
-            # Add spacing between dates if we have multiple dates
-            if len(sorted_dates) > 1 and event_date != sorted_dates[-1]:
-                event_lines.append("")
-        
-        # Overall assessment
-        final_sentiment = resolution.get("final_sentiment", "Neutral")
-        reason = resolution.get("reason", "No events analyzed")
         sentiment_emoji = self._get_sentiment_emoji(final_sentiment)
         
-        narrative = self._generate_narrative(currency, final_sentiment, len(events))
-        overall_line = f"**Overall**: {sentiment_emoji} {final_sentiment} – {narrative}"
+        # Count events by sentiment
+        bullish_count = sum(1 for e in events if e.get("sentiment", 0) > 0)
+        bearish_count = sum(1 for e in events if e.get("sentiment", 0) < 0)
+        neutral_count = sum(1 for e in events if e.get("sentiment", 0) == 0)
         
-        # Combine section
-        section = "\n".join([section_header] + event_lines + [overall_line, ""])
+        # Create concise event summary
+        event_summary = []
+        if bullish_count > 0:
+            event_summary.append(f"🟢{bullish_count}")
+        if bearish_count > 0:
+            event_summary.append(f"🔴{bearish_count}")
+        if neutral_count > 0:
+            event_summary.append(f"⚪{neutral_count}")
+        
+        events_text = " | ".join(event_summary) if event_summary else "No events"
+        
+        # Key events (limit to 2 most significant)
+        key_events = []
+        data_events = [e for e in events if e.get("data_available", True) and e.get("sentiment", 0) != 0]
+        
+        # Sort by absolute sentiment value and take top 2
+        data_events.sort(key=lambda x: abs(x.get("sentiment", 0)), reverse=True)
+        for event in data_events[:2]:
+            event_name = event.get("event_name", "Unknown")
+            # Shorten common event names
+            event_name = event_name.replace("Preliminary", "Prelim").replace("Manufacturing", "Mfg")
+            if len(event_name) > 20:
+                event_name = event_name[:17] + "..."
+            key_events.append(event_name)
+        
+        key_events_text = ", ".join(key_events) if key_events else "No key events"
+        
+        # Format section
+        section = f"**{flag_emoji} {currency}**: {sentiment_emoji} {final_sentiment} ({events_text})\n   Key: {key_events_text}"
         
         # Summary for net section
         summary = f"{currency}: {final_sentiment}"

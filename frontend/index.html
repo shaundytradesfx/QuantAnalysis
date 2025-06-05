@@ -38,6 +38,60 @@
             color: #ffffff;
             border-bottom: 2px solid #ffffff;
         }
+        
+        /* Phase 3: Actual Sentiment Styles */
+        .sentiment-forecast { color: #3b82f6; }
+        .sentiment-actual { color: #059669; }
+        .accuracy-match { color: #f59e0b; }
+        .accuracy-mismatch { color: #dc2626; }
+        .accuracy-no-data { color: #6b7280; }
+        
+        .sentiment-toggle {
+            background: #f3f4f6;
+            border-radius: 0.5rem;
+            padding: 0.25rem;
+            display: inline-flex;
+        }
+        
+        .sentiment-toggle button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            border: none;
+            background: transparent;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .sentiment-toggle button.active {
+            background: #ffffff;
+            color: #1f2937;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+        
+        .sentiment-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .accuracy-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .accuracy-match { background: #fef3c7; color: #92400e; }
+        .accuracy-mismatch { background: #fee2e2; color: #991b1b; }
+        .accuracy-no-data { background: #f3f4f6; color: #6b7280; }
     </style>
 </head>
 <body class="bg-gray-50 font-sans">
@@ -77,22 +131,34 @@
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="USD">
                             <span class="currency-flag">🇺🇸</span>
                             <span class="font-medium">USD</span>
-                            <span id="usd-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="usd-sentiment" class="text-sm"></span>
+                                <span id="usd-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="EUR">
                             <span class="currency-flag">🇪🇺</span>
                             <span class="font-medium">EUR</span>
-                            <span id="eur-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="eur-sentiment" class="text-sm"></span>
+                                <span id="eur-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="GBP">
                             <span class="currency-flag">🇬🇧</span>
                             <span class="font-medium">GBP</span>
-                            <span id="gbp-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="gbp-sentiment" class="text-sm"></span>
+                                <span id="gbp-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="JPY">
                             <span class="currency-flag">🇯🇵</span>
                             <span class="font-medium">JPY</span>
-                            <span id="jpy-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="jpy-sentiment" class="text-sm"></span>
+                                <span id="jpy-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -104,22 +170,34 @@
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="AUD">
                             <span class="currency-flag">🇦🇺</span>
                             <span class="font-medium">AUD</span>
-                            <span id="aud-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="aud-sentiment" class="text-sm"></span>
+                                <span id="aud-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="CAD">
                             <span class="currency-flag">🇨🇦</span>
                             <span class="font-medium">CAD</span>
-                            <span id="cad-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="cad-sentiment" class="text-sm"></span>
+                                <span id="cad-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="CHF">
                             <span class="currency-flag">🇨🇭</span>
                             <span class="font-medium">CHF</span>
-                            <span id="chf-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="chf-sentiment" class="text-sm"></span>
+                                <span id="chf-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                         <div class="currency-item flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-currency="NZD">
                             <span class="currency-flag">🇳🇿</span>
                             <span class="font-medium">NZD</span>
-                            <span id="nzd-sentiment" class="ml-auto text-sm"></span>
+                            <div class="ml-auto flex flex-col items-end space-y-1">
+                                <span id="nzd-sentiment" class="text-sm"></span>
+                                <span id="nzd-actual-sentiment" class="text-xs opacity-75"></span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -132,8 +210,24 @@
             <div id="dashboard-content" class="tab-content">
                 <!-- Current Analysis Header -->
                 <div class="mb-6">
-                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Economic Sentiment Analysis</h1>
-                    <p id="current-week" class="text-gray-600">Loading current week data...</p>
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-900 mb-2">Economic Sentiment Analysis</h1>
+                            <p id="current-week" class="text-gray-600">Loading current week data...</p>
+                        </div>
+                        <!-- Phase 3: Sentiment View Toggle -->
+                        <div class="sentiment-toggle">
+                            <button id="forecast-view" class="active" data-view="forecast">
+                                <i class="fas fa-chart-line mr-1"></i>Forecast
+                            </button>
+                            <button id="actual-view" data-view="actual">
+                                <i class="fas fa-check-circle mr-1"></i>Actual
+                            </button>
+                            <button id="comparison-view" data-view="comparison">
+                                <i class="fas fa-balance-scale mr-1"></i>Compare
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Selected Currency Analysis -->
@@ -168,7 +262,10 @@
                                     <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Currency</th>
                                     <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Previous</th>
                                     <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Forecast</th>
+                                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Actual</th>
                                     <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Sentiment</th>
+                                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Actual Sentiment</th>
+                                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Accuracy</th>
                                     <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Date</th>
                                 </tr>
                             </thead>
@@ -244,139 +341,18 @@
         </div>
     </div>
 
-    <!-- Load configuration first -->
-    <script src="config.js"></script>
-    <script src="static/js/dashboard.js?v=20250526220000"></script>
+    <!-- Load configuration and sample data first -->
+    <script src="config.js?v=20250602150000"></script>
+    <script src="data/sample-data.js?v=20250602150000"></script>
+    <script src="static/js/dashboard.js?v=20250602150000"></script>
     <script>
-        // Authentication handling for Firebase hosted frontend
-        const urlParams = new URLSearchParams(window.location.search);
-        const isAuthenticated = urlParams.get('authenticated') === 'true';
-        let authToken = sessionStorage.getItem('authToken');
+        // No authentication required - public access with static data
+        console.log('🎉 Public access enabled - using static sample data');
         
-        // If coming from authentication page, we should have a token
-        if (isAuthenticated && !authToken) {
-            authToken = localStorage.getItem('gcloud_token');
-            if (authToken) {
-                sessionStorage.setItem('authToken', authToken);
-            }
-        }
-        
-        if (!authToken && !isAuthenticated) {
-            // Show authentication prompt instead of redirecting
-            showAuthenticationPrompt();
-        } else if (authToken) {
-            // Set up authenticated fetch for all API calls to Cloud Run
-            const originalFetch = window.fetch;
-            window.fetch = function(url, options = {}) {
-                // Convert relative URLs to absolute Cloud Run URLs
-                if (url.startsWith('/api/')) {
-                    url = CONFIG.API_BASE_URL + url;
-                }
-                
-                if (url.includes(CONFIG.API_BASE_URL)) {
-                    options.headers = options.headers || {};
-                    options.headers['Authorization'] = `Bearer ${authToken}`;
-                }
-                return originalFetch(url, options);
-            };
-            
-            // Add logout functionality
-            window.logout = function() {
-                sessionStorage.removeItem('authToken');
-                localStorage.removeItem('gcloud_token');
-                window.location.href = '/';
-            };
-            
-            // Add logout button to header
-            const headerActions = document.querySelector('#health-status').parentElement;
-            const logoutBtn = document.createElement('button');
-            logoutBtn.innerHTML = '🚪 Logout';
-            logoutBtn.className = 'text-sm bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded';
-            logoutBtn.onclick = logout;
-            headerActions.appendChild(logoutBtn);
-            
-            // Clean up URL if we came from authentication
-            if (isAuthenticated) {
-                window.history.replaceState({}, document.title, '/');
-            }
-        }
-        
-        // Authentication prompt for Firebase hosted frontend
-        function showAuthenticationPrompt() {
-            const authModal = document.createElement('div');
-            authModal.id = 'auth-modal';
-            authModal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0,0,0,0.8);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 10000;
-            `;
-            
-            authModal.innerHTML = `
-                <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%;">
-                    <h2 style="color: #333; margin-bottom: 20px;">🔐 Authentication Required</h2>
-                    <p style="color: #666; margin-bottom: 20px;">To access the dashboard, please enter your Google Cloud identity token:</p>
-                    <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; margin: 10px 0;">
-                        gcloud auth print-identity-token
-                    </div>
-                    <textarea id="auth-token" placeholder="Paste your identity token here..." style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin: 10px 0; box-sizing: border-box;"></textarea>
-                    <div style="text-align: center;">
-                        <button onclick="authenticateWithToken()" style="background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                            🚀 Access Dashboard
-                        </button>
-                        <button onclick="testTokenConnection()" style="background: #007bff; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                            🔍 Test Token
-                        </button>
-                    </div>
-                    <div id="auth-status" style="margin-top: 15px; text-align: center;"></div>
-                </div>
-            `;
-            
-            document.body.appendChild(authModal);
-        }
-        
-        function authenticateWithToken() {
-            const token = document.getElementById('auth-token').value.trim();
-            if (!token) {
-                document.getElementById('auth-status').innerHTML = '<div style="color: red;">Please enter your token</div>';
-                return;
-            }
-            
-            sessionStorage.setItem('authToken', token);
-            localStorage.setItem('gcloud_token', token);
-            document.getElementById('auth-modal').remove();
-            location.reload();
-        }
-        
-        function testTokenConnection() {
-            const token = document.getElementById('auth-token').value.trim();
-            if (!token) {
-                document.getElementById('auth-status').innerHTML = '<div style="color: red;">Please enter your token first</div>';
-                return;
-            }
-            
-            document.getElementById('auth-status').innerHTML = '<div style="color: blue;">Testing connection...</div>';
-            
-            fetch(CONFIG.API_BASE_URL + '/api/health', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            .then(response => {
-                if (response.ok) {
-                    document.getElementById('auth-status').innerHTML = '<div style="color: green;">✅ Token is valid!</div>';
-                } else {
-                    document.getElementById('auth-status').innerHTML = '<div style="color: red;">❌ Token test failed</div>';
-                }
-            })
-            .catch(error => {
-                document.getElementById('auth-status').innerHTML = '<div style="color: red;">❌ Connection error</div>';
-            });
-        }
+        // Initialize dashboard immediately
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Initializing public dashboard with sample data...');
+        });
     </script>
 </body>
 </html> 

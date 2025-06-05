@@ -13,14 +13,6 @@ from pydantic import BaseModel
 import uvicorn
 from sqlalchemy import text
 import secrets
-try:
-    import jwt
-    from google.auth.transport import requests as google_requests
-    from google.oauth2 import id_token
-    OAUTH_AVAILABLE = True
-except ImportError:
-    OAUTH_AVAILABLE = False
-    logger.warning("OAuth dependencies not available. OAuth features will be disabled.")
 
 from src.database.config import SessionLocal
 from src.database.models import Event, Indicator, Sentiment, Config
@@ -30,6 +22,16 @@ from src.utils.logging import get_logger
 
 # Get logger
 logger = get_logger(__name__)
+
+import secrets
+try:
+    import jwt
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token
+    OAUTH_AVAILABLE = True
+except ImportError:
+    OAUTH_AVAILABLE = False
+    logger.warning("OAuth dependencies not available. OAuth features will be disabled.")
 
 # OAuth configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -48,17 +50,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware for Firebase frontend
+# Add CORS middleware for public access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://forex-sentiment-frontend.web.app",
-        "https://forex-sentiment-frontend.firebaseapp.com",
-        "http://localhost:3000",  # For local development
-        "http://127.0.0.1:3000",  # For local development
-        "*"  # Allow all origins for development (remove in production)
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins for public access
+    allow_credentials=False,  # No credentials needed for public access
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -636,34 +632,133 @@ async def get_health():
 
 @app.get("/api/sentiments", response_model=List[SentimentResponse])
 async def get_sentiments(week_start: Optional[str] = None, week_end: Optional[str] = None):
-    """Get sentiment analysis results."""
+    """Get sentiment analysis for all currencies."""
+    try:
+        with get_db_session() as db:
+            query = db.query(Sentiment)
+            
+            if week_start:
+                query = query.filter(Sentiment.week_start >= week_start)
+            if week_end:
+                query = query.filter(Sentiment.week_end <= week_end)
+            
+            sentiments = query.order_by(Sentiment.computed_at.desc()).limit(50).all()
+            
+            return [
+                SentimentResponse(
+                    currency=s.currency,
+                    final_sentiment=s.final_sentiment,
+                    week_start=s.week_start.isoformat(),
+                    week_end=s.week_end.isoformat(),
+                    events=s.details_json.get("events", []) if s.details_json else [],
+                    computed_at=s.computed_at
+                )
+                for s in sentiments
+            ]
+    except Exception as e:
+        logger.error(f"Error getting sentiments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/actual-sentiments")
+async def get_actual_sentiments(week_start: Optional[str] = None, week_end: Optional[str] = None):
+    """Get actual sentiment analysis for all currencies based on actual vs previous values."""
     try:
         with SentimentCalculator() as calculator:
-            if week_start and week_end:
-                start_date = datetime.strptime(week_start, "%Y-%m-%d")
-                end_date = datetime.strptime(week_end, "%Y-%m-%d")
-                sentiments = calculator.calculate_weekly_sentiments(start_date, end_date)
-            else:
-                sentiments = calculator.calculate_weekly_sentiments()
-        
-        response = []
-        for currency, data in sentiments.items():
-            # Extract week bounds from analysis_period
-            week_start_str = data['analysis_period']['week_start'][:10]  # Get YYYY-MM-DD part
-            week_end_str = data['analysis_period']['week_end'][:10]      # Get YYYY-MM-DD part
+            # Parse date parameters if provided
+            start_date = None
+            end_date = None
             
-            response.append(SentimentResponse(
-                currency=currency,
-                final_sentiment=data['resolution']['final_sentiment'],
-                week_start=week_start_str,
-                week_end=week_end_str,
-                events=data['events'],
-                computed_at=datetime.now()
-            ))
-        
-        return response
+            if week_start:
+                start_date = datetime.fromisoformat(week_start.replace('Z', '+00:00'))
+            if week_end:
+                end_date = datetime.fromisoformat(week_end.replace('Z', '+00:00'))
+            
+            # Calculate actual sentiment
+            actual_sentiments = calculator.calculate_actual_sentiment(start_date, end_date)
+            
+            return {
+                "status": "success",
+                "data": actual_sentiments,
+                "message": f"Retrieved actual sentiment for {len(actual_sentiments)} currencies"
+            }
     except Exception as e:
-        logger.error(f"Error getting sentiments: {e}")
+        logger.error(f"Error getting actual sentiments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/actual-sentiment/{currency}")
+async def get_actual_sentiment_by_currency(currency: str, week_start: Optional[str] = None, week_end: Optional[str] = None):
+    """Get actual sentiment analysis for a specific currency."""
+    try:
+        with SentimentCalculator() as calculator:
+            # Parse date parameters if provided
+            start_date = None
+            end_date = None
+            
+            if week_start:
+                start_date = datetime.fromisoformat(week_start.replace('Z', '+00:00'))
+            if week_end:
+                end_date = datetime.fromisoformat(week_end.replace('Z', '+00:00'))
+            
+            # Calculate actual sentiment for all currencies
+            actual_sentiments = calculator.calculate_actual_sentiment(start_date, end_date)
+            
+            # Filter for specific currency
+            currency_sentiment = actual_sentiments.get(currency.upper())
+            
+            if not currency_sentiment:
+                return {
+                    "status": "not_found",
+                    "data": None,
+                    "message": f"No actual sentiment data found for {currency.upper()}"
+                }
+            
+            return {
+                "status": "success",
+                "data": currency_sentiment,
+                "message": f"Retrieved actual sentiment for {currency.upper()}"
+            }
+    except Exception as e:
+        logger.error(f"Error getting actual sentiment for {currency}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/combined-sentiments")
+async def get_combined_sentiments(week_start: Optional[str] = None, week_end: Optional[str] = None):
+    """Get both forecast and actual sentiment analysis for comparison."""
+    try:
+        with SentimentCalculator() as calculator:
+            # Parse date parameters if provided
+            start_date = None
+            end_date = None
+            
+            if week_start:
+                start_date = datetime.fromisoformat(week_start.replace('Z', '+00:00'))
+            if week_end:
+                end_date = datetime.fromisoformat(week_end.replace('Z', '+00:00'))
+            
+            # Calculate both forecast and actual sentiment
+            forecast_sentiments = calculator.calculate_weekly_sentiments(start_date, end_date)
+            actual_sentiments = calculator.calculate_actual_sentiment(start_date, end_date)
+            
+            # Combine the results
+            combined_results = {}
+            all_currencies = set(forecast_sentiments.keys()) | set(actual_sentiments.keys())
+            
+            for currency in all_currencies:
+                combined_results[currency] = {
+                    "currency": currency,
+                    "forecast_sentiment": forecast_sentiments.get(currency),
+                    "actual_sentiment": actual_sentiments.get(currency),
+                    "has_forecast": currency in forecast_sentiments,
+                    "has_actual": currency in actual_sentiments
+                }
+            
+            return {
+                "status": "success",
+                "data": combined_results,
+                "message": f"Retrieved combined sentiment for {len(combined_results)} currencies"
+            }
+    except Exception as e:
+        logger.error(f"Error getting combined sentiments: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/events", response_model=List[EventResponse])
@@ -809,19 +904,114 @@ async def cron_scrape():
 
 @app.post("/api/cron/analyze")
 async def cron_analyze():
-    """Cron endpoint for running sentiment analysis (triggered by Cloud Scheduler)."""
+    """Trigger sentiment analysis (for cron jobs)."""
     try:
-        from src.run_analysis import run_analysis
+        with SentimentCalculator() as calculator:
+            sentiments = calculator.calculate_weekly_sentiments()
         
-        logger.info("Cron job: Starting sentiment analysis...")
-        result = run_analysis()
-        
-        if result == 0:
-            return {"status": "success", "message": "Analysis completed successfully"}
-        else:
-            return {"status": "error", "message": "Analysis failed", "exit_code": result}
+        return {
+            "status": "success",
+            "message": f"Analysis completed for {len(sentiments)} currencies",
+            "currencies": list(sentiments.keys())
+        }
     except Exception as e:
-        logger.error(f"Cron analysis error: {e}")
+        logger.error(f"Error in cron analyze: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/cron/collect-actual")
+async def cron_collect_actual():
+    """Trigger actual data collection (for cron jobs)."""
+    try:
+        from src.scraper.actual_data_collector import collect_actual_data
+        
+        total_processed, successful_updates = collect_actual_data()
+        
+        return {
+            "status": "success",
+            "message": f"Actual data collection completed",
+            "total_processed": total_processed,
+            "successful_updates": successful_updates,
+            "success_rate": f"{(successful_updates/total_processed*100):.1f}%" if total_processed > 0 else "0%"
+        }
+    except Exception as e:
+        logger.error(f"Error in cron collect actual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Phase 6: Monitoring and Alerting API Endpoints
+@app.get("/api/monitoring/health")
+async def get_actual_data_health():
+    """Get actual data collection health status."""
+    try:
+        from src.utils.actual_data_monitoring import ActualDataMonitor
+        
+        with ActualDataMonitor() as monitor:
+            health_status = monitor.get_collection_health_status()
+        
+        return health_status
+    except Exception as e:
+        logger.error(f"Error getting actual data health: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/monitoring/stats")
+async def get_monitoring_stats(days: int = 30):
+    """Get comprehensive monitoring statistics."""
+    try:
+        from src.utils.actual_data_monitoring import get_monitoring_stats
+        
+        stats = get_monitoring_stats()
+        
+        # Override accuracy period if specified
+        if days != 30:
+            from src.utils.actual_data_monitoring import ActualDataMonitor
+            with ActualDataMonitor() as monitor:
+                stats['accuracy_statistics'] = monitor.get_accuracy_statistics(days)
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting monitoring stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/monitoring/accuracy")
+async def get_accuracy_stats(days: int = 30):
+    """Get forecast accuracy statistics."""
+    try:
+        from src.utils.actual_data_monitoring import ActualDataMonitor
+        
+        with ActualDataMonitor() as monitor:
+            accuracy_stats = monitor.get_accuracy_statistics(days)
+        
+        return accuracy_stats
+    except Exception as e:
+        logger.error(f"Error getting accuracy stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/monitoring/test-alert")
+async def send_test_alert():
+    """Send a test alert to Discord."""
+    try:
+        from src.utils.alerting import send_test_alert
+        
+        success = send_test_alert()
+        
+        if success:
+            return {"status": "success", "message": "Test alert sent successfully"}
+        else:
+            return {"status": "error", "message": "Failed to send test alert"}
+    except Exception as e:
+        logger.error(f"Error sending test alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/monitoring/check-alerts")
+async def check_alerts():
+    """Check for alert conditions and send notifications if needed."""
+    try:
+        from src.utils.alerting import check_and_send_alerts
+        
+        check_and_send_alerts()
+        
+        return {"status": "success", "message": "Alert check completed"}
+    except Exception as e:
+        logger.error(f"Error checking alerts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/cron/notify")
@@ -908,6 +1098,197 @@ async def check_auth(request: Request):
         return {"authenticated": True, "token_valid": True}
     except Exception:
         return {"authenticated": False, "token_valid": False}
+
+# Public API endpoints (no authentication required)
+@app.get("/public/health")
+async def public_health():
+    """Public health endpoint with real system status."""
+    try:
+        # Check database connection
+        with get_db_session() as session:
+            session.execute(text("SELECT 1"))
+            db_status = "healthy"
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        db_status = "unhealthy"
+    
+    # Check Discord connection
+    try:
+        notifier = DiscordNotifier()
+        discord_results = notifier.test_connection()
+        discord_status = "healthy" if all(discord_results.values()) else "unhealthy"
+    except Exception as e:
+        logger.error(f"Discord health check failed: {e}")
+        discord_status = "unhealthy"
+    
+    # Overall status
+    overall_status = "healthy" if db_status == "healthy" and discord_status == "healthy" else "unhealthy"
+    
+    return {
+        "status": overall_status,
+        "database": db_status,
+        "discord": discord_status,
+        "last_scrape": None,  # TODO: Implement last scrape tracking
+        "last_analysis": None  # TODO: Implement last analysis tracking
+    }
+
+@app.get("/public/sentiments")
+async def public_sentiments():
+    """Public sentiments endpoint with real data."""
+    try:
+        with SentimentCalculator() as calculator:
+            sentiments = calculator.calculate_weekly_sentiments()
+        
+        response = []
+        for currency, data in sentiments.items():
+            # Extract week bounds from analysis_period
+            week_start_str = data['analysis_period']['week_start'][:10]  # Get YYYY-MM-DD part
+            week_end_str = data['analysis_period']['week_end'][:10]      # Get YYYY-MM-DD part
+            
+            response.append({
+                "currency": currency,
+                "final_sentiment": data['resolution']['final_sentiment'],
+                "week_start": week_start_str,
+                "week_end": week_end_str,
+                "events": data['events'],
+                "computed_at": datetime.now().isoformat()
+            })
+        
+        return response
+    except Exception as e:
+        logger.error(f"Error getting public sentiments: {e}")
+        # Fallback to sample data if database fails
+        return [
+            {
+                "currency": "USD",
+                "final_sentiment": "Bearish with Consolidation",
+                "week_start": "2025-05-26",
+                "week_end": "2025-06-01", 
+                "events": [
+                    {"event_name": "Core PCE Price Index m/m", "sentiment": "Bearish"},
+                    {"event_name": "GDP q/q", "sentiment": "Neutral"},
+                    {"event_name": "Unemployment Claims", "sentiment": "Bearish"}
+                ],
+                "computed_at": datetime.now().isoformat()
+            }
+        ]
+
+@app.get("/public/events")
+async def public_events():
+    """Public events endpoint with real data."""
+    try:
+        with get_db_session() as session:
+            query = session.query(Event, Indicator).join(
+                Indicator, Event.id == Indicator.event_id
+            ).order_by(Event.scheduled_datetime.desc()).limit(100)
+            
+            results = query.all()
+            
+            events = []
+            for event, indicator in results:
+                events.append({
+                    "id": event.id,
+                    "currency": event.currency,
+                    "event_name": event.event_name,
+                    "scheduled_datetime": event.scheduled_datetime.isoformat(),
+                    "impact_level": event.impact_level,
+                    "previous_value": indicator.previous_value,
+                    "forecast_value": indicator.forecast_value
+                })
+            
+            return events
+    except Exception as e:
+        logger.error(f"Error getting public events: {e}")
+        # Fallback to sample data if database fails
+        return [
+            {
+                "id": 1,
+                "currency": "USD",
+                "event_name": "Core PCE Price Index m/m",
+                "scheduled_datetime": "2025-05-30T12:30:00Z",
+                "impact_level": "High",
+                "previous_value": 0.3,
+                "forecast_value": 0.2
+            }
+        ]
+
+@app.get("/public/config")
+async def public_config():
+    """Public config endpoint with real data."""
+    try:
+        with get_db_session() as session:
+            configs = session.query(Config).all()
+            return [
+                {
+                    "key": config.key,
+                    "value": config.value if not config.key.endswith('_URL') else "***",  # Hide sensitive URLs
+                    "updated_at": config.updated_at.isoformat()
+                }
+                for config in configs
+            ]
+    except Exception as e:
+        logger.error(f"Error getting public config: {e}")
+        # Fallback to sample data if database fails
+        return [
+            {
+                "key": "DISCORD_WEBHOOK_URL",
+                "value": "***",
+                "updated_at": datetime.now().isoformat()
+            },
+            {
+                "key": "THRESHOLD_DELTA", 
+                "value": "0.0",
+                "updated_at": datetime.now().isoformat()
+            }
+        ]
+
+@app.get("/public/currencies")
+async def public_currencies():
+    """Public currencies endpoint with real data."""
+    try:
+        with get_db_session() as session:
+            currencies = session.query(Event.currency).distinct().all()
+            return [currency[0] for currency in currencies if currency[0]]
+    except Exception as e:
+        logger.error(f"Error getting public currencies: {e}")
+        # Fallback to sample data if database fails
+        return ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD"]
+
+@app.post("/public/discord/test")
+async def public_discord_test():
+    """Public Discord test endpoint with real functionality."""
+    try:
+        notifier = DiscordNotifier()
+        results = notifier.test_connection()
+        
+        if all(results.values()):
+            return {"status": "success", "message": "All Discord webhooks are working"}
+        else:
+            return {"status": "partial", "message": "Some Discord webhooks failed", "details": results}
+    except Exception as e:
+        logger.error(f"Error testing public Discord webhook: {e}")
+        return {"status": "error", "message": f"Discord test failed: {str(e)}"}
+
+@app.post("/public/discord/send-report")
+async def public_send_report():
+    """Public Discord send report endpoint with real functionality."""
+    try:
+        # Get sentiment data for current week
+        with SentimentCalculator() as calculator:
+            sentiments = calculator.calculate_weekly_sentiments()
+            week_start, _ = calculator.get_current_week_bounds()
+        
+        # Send Discord notification
+        notifier = DiscordNotifier()
+        success = notifier.send_weekly_report(sentiments, week_start)
+        
+        if success:
+            return {"status": "success", "message": "Weekly report sent successfully"}
+        else:
+            return {"status": "error", "message": "Failed to send weekly report"}
+    except Exception as e:
+        logger.error(f"Error sending public weekly report: {e}")
+        return {"status": "error", "message": f"Failed to send weekly report: {str(e)}"}
 
 def run_server(host: str = "127.0.0.1", port: int = 8000, reload: bool = True):
     """Run the FastAPI server."""

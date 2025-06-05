@@ -48,6 +48,39 @@ spec:
           value: "/app"
         - name: PORT
           value: "8080"
+        # Schedule settings
+        - name: SCRAPER_SCHEDULE_TIME
+          value: "02:00"
+        - name: ANALYSIS_SCHEDULE_DAY
+          value: "Monday"
+        - name: ANALYSIS_SCHEDULE_TIME
+          value: "06:00"
+        # Analysis configuration
+        - name: SENTIMENT_THRESHOLD
+          value: "0.0"
+        # Actual Data Collection (Phase 2)
+        - name: ACTUAL_DATA_COLLECTION_ENABLED
+          value: "true"
+        - name: ACTUAL_DATA_COLLECTION_INTERVAL
+          value: "4"
+        - name: ACTUAL_DATA_RETRY_LIMIT
+          value: "3"
+        - name: ACTUAL_DATA_LOOKBACK_DAYS
+          value: "7"
+        - name: ACTUAL_DATA_TIMEOUT_SECONDS
+          value: "30"
+        # Discord Reporting (Phase 4)
+        - name: INCLUDE_ACTUAL_SENTIMENT_IN_REPORTS
+          value: "true"
+        - name: SHOW_FORECAST_ACCURACY_IN_REPORTS
+          value: "true"
+        - name: SHOW_SURPRISES_IN_REPORTS
+          value: "true"
+        # Phase 6: Monitoring & Alerting
+        - name: ENABLE_DISCORD_ALERTS
+          value: "true"
+        - name: ALERT_COOLDOWN_HOURS
+          value: "4"
         resources:
           limits:
             # Use minimum resources for free tier

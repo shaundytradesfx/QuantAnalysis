@@ -6,12 +6,13 @@ This module handles:
 - Discord webhook integration
 - Error handling and retry logic
 - Health check notifications
+- Phase 4: Actual sentiment reporting with accuracy metrics
 """
 import os
 import json
 import time
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 from functools import wraps
 import requests
@@ -45,6 +46,7 @@ def timing_decorator(func):
 class DiscordNotifier:
     """
     Handles Discord webhook notifications for sentiment analysis reports.
+    Phase 4: Enhanced with actual sentiment data and accuracy tracking.
     """
     
     def __init__(self, webhook_url: str = None, health_webhook_url: str = None):
@@ -57,6 +59,11 @@ class DiscordNotifier:
         """
         self.webhook_url = webhook_url or os.getenv("DISCORD_WEBHOOK_URL")
         self.health_webhook_url = health_webhook_url or os.getenv("DISCORD_HEALTH_WEBHOOK_URL")
+        
+        # Phase 4: Configuration for actual sentiment reporting
+        self.include_actual_sentiment = os.getenv("INCLUDE_ACTUAL_SENTIMENT_IN_REPORTS", "true").lower() == "true"
+        self.show_forecast_accuracy = os.getenv("SHOW_FORECAST_ACCURACY_IN_REPORTS", "true").lower() == "true"
+        self.show_surprises = os.getenv("SHOW_SURPRISES_IN_REPORTS", "true").lower() == "true"
         
         if not self.webhook_url:
             logger.warning("No Discord webhook URL configured")
@@ -79,6 +86,7 @@ class DiscordNotifier:
     def format_weekly_report(self, currency_sentiments: Dict[str, Any], week_start: datetime) -> str:
         """
         Format the weekly sentiment analysis into a Discord-friendly message.
+        Phase 4: Enhanced with actual sentiment data and accuracy metrics.
         
         Args:
             currency_sentiments (Dict[str, Any]): Sentiment analysis results by currency
@@ -99,40 +107,73 @@ class DiscordNotifier:
         # Currency sections
         currency_sections = []
         net_summary = []
+        accuracy_data = []
+        surprises = []
         
         for currency in sorted_currencies:
             sentiment_data = currency_sentiments[currency]
-            section, summary = self._format_currency_section(currency, sentiment_data)
+            section, summary, accuracy, currency_surprises = self._format_currency_section(currency, sentiment_data)
             currency_sections.append(section)
             net_summary.append(summary)
+            if accuracy is not None:
+                accuracy_data.append((currency, accuracy))
+            surprises.extend(currency_surprises)
         
         # Build complete message
-        message_parts = [
-            header,
-            "\n".join(currency_sections),
-            "\n**📈 Summary:** " + " | ".join(net_summary),
-            f"\n_Next run: {self._get_next_monday(week_start).strftime('%b %d')} 06:00 UTC_"
-        ]
+        message_parts = [header]
+        message_parts.extend(currency_sections)
+        
+        # Add net summary
+        message_parts.append("\n**📈 Summary:** " + " | ".join(net_summary))
+        
+        # Phase 4: Add accuracy section if enabled and data available
+        if self.show_forecast_accuracy and accuracy_data:
+            accuracy_section = self._format_accuracy_section(accuracy_data)
+            message_parts.append(accuracy_section)
+        
+        # Phase 4: Add surprises section if enabled and surprises found
+        if self.show_surprises and surprises:
+            surprises_section = self._format_surprises_section(surprises)
+            message_parts.append(surprises_section)
+        
+        # Footer
+        message_parts.append(f"\n_Next run: {self._get_next_monday(week_start).strftime('%b %d')} 06:00 UTC_")
         
         return "\n".join(message_parts)
     
-    def _format_currency_section(self, currency: str, sentiment_data: Dict[str, Any]) -> tuple:
+    def _format_currency_section(self, currency: str, sentiment_data: Dict[str, Any]) -> Tuple[str, str, Optional[float], List[Dict]]:
         """
-        Format a single currency's sentiment section in a concise format.
+        Format a single currency's sentiment section.
+        Phase 4: Enhanced with actual sentiment data and accuracy tracking.
         
         Args:
             currency (str): Currency code
             sentiment_data (Dict[str, Any]): Sentiment analysis data
             
         Returns:
-            tuple: (formatted_section, summary_line)
+            tuple: (formatted_section, summary_line, accuracy_percentage, surprises_list)
         """
         events = sentiment_data.get("events", [])
         final_sentiment = sentiment_data.get("final_sentiment", "Neutral")
         
+        # Phase 4: Get actual sentiment data if available
+        actual_sentiment = sentiment_data.get("actual_sentiment", final_sentiment)
+        forecast_accuracy = sentiment_data.get("forecast_accuracy")
+        actual_available = sentiment_data.get("actual_available", False)
+        
         # Currency header with flag emoji
         flag_emoji = self._get_flag_emoji(currency)
         sentiment_emoji = self._get_sentiment_emoji(final_sentiment)
+        
+        # Phase 4: Actual sentiment emoji if different from forecast
+        actual_emoji = ""
+        accuracy_indicator = ""
+        if self.include_actual_sentiment and actual_available:
+            actual_emoji = self._get_sentiment_emoji(actual_sentiment)
+            if actual_sentiment == final_sentiment:
+                accuracy_indicator = " ✅"
+            else:
+                accuracy_indicator = " ❌"
         
         # Count events by sentiment
         bullish_count = sum(1 for e in events if e.get("sentiment", 0) > 0)
@@ -150,8 +191,9 @@ class DiscordNotifier:
         
         events_text = " | ".join(event_summary) if event_summary else "No events"
         
-        # Key events (limit to 2 most significant)
+        # Phase 4: Enhanced key events with actual data
         key_events = []
+        surprises = []
         data_events = [e for e in events if e.get("data_available", True) and e.get("sentiment", 0) != 0]
         
         # Sort by absolute sentiment value and take top 2
@@ -162,17 +204,121 @@ class DiscordNotifier:
             event_name = event_name.replace("Preliminary", "Prelim").replace("Manufacturing", "Mfg")
             if len(event_name) > 20:
                 event_name = event_name[:17] + "..."
+            
+            # Phase 4: Add actual data if available
+            if self.include_actual_sentiment and event.get("actual_available"):
+                forecast_val = event.get("forecast_value")
+                actual_val = event.get("actual_value")
+                if forecast_val is not None and actual_val is not None:
+                    key_events.append(f"{event_name} (F:{forecast_val:.1f}, A:{actual_val:.1f})")
+                else:
+                    key_events.append(event_name)
+                
+                # Check for surprises
+                event_accuracy = event.get("accuracy", "")
+                if event_accuracy == "mismatch":
+                    surprises.append({
+                        "currency": currency,
+                        "event": event_name,
+                        "forecast_sentiment": event.get("sentiment_label", "Unknown"),
+                        "actual_sentiment": event.get("actual_sentiment_label", "Unknown"),
+                        "forecast_value": forecast_val,
+                        "actual_value": actual_val
+                    })
+            else:
             key_events.append(event_name)
         
         key_events_text = ", ".join(key_events) if key_events else "No key events"
         
-        # Format section
+        # Phase 4: Format section with actual sentiment if available
+        if self.include_actual_sentiment and actual_available:
+            if actual_sentiment != final_sentiment:
+                section = f"**{flag_emoji} {currency}**: {sentiment_emoji} {final_sentiment} → {actual_emoji} **{actual_sentiment}**{accuracy_indicator} ({events_text})\n   Key: {key_events_text}"
+            else:
+                section = f"**{flag_emoji} {currency}**: {sentiment_emoji} **{final_sentiment}**{accuracy_indicator} ({events_text})\n   Key: {key_events_text}"
+        else:
         section = f"**{flag_emoji} {currency}**: {sentiment_emoji} {final_sentiment} ({events_text})\n   Key: {key_events_text}"
         
         # Summary for net section
+        if self.include_actual_sentiment and actual_available:
+            summary = f"{currency}: {actual_sentiment}"
+        else:
         summary = f"{currency}: {final_sentiment}"
         
-        return section, summary
+        return section, summary, forecast_accuracy, surprises
+    
+    def _format_accuracy_section(self, accuracy_data: List[Tuple[str, float]]) -> str:
+        """
+        Format forecast accuracy section.
+        Phase 4: New method for accuracy reporting.
+        
+        Args:
+            accuracy_data: List of (currency, accuracy_percentage) tuples
+            
+        Returns:
+            str: Formatted accuracy section
+        """
+        if not accuracy_data:
+            return ""
+        
+        # Calculate overall accuracy
+        valid_accuracies = [acc for _, acc in accuracy_data if acc is not None]
+        if valid_accuracies:
+            overall_accuracy = sum(valid_accuracies) / len(valid_accuracies)
+            overall_emoji = "🎯" if overall_accuracy >= 80 else "📊" if overall_accuracy >= 60 else "⚠️"
+        else:
+            overall_accuracy = 0
+            overall_emoji = "❓"
+        
+        accuracy_lines = [f"\n**{overall_emoji} Forecast Accuracy: {overall_accuracy:.0f}%**"]
+        
+        # Individual currency accuracies
+        currency_accuracies = []
+        for currency, accuracy in accuracy_data:
+            if accuracy is not None:
+                acc_emoji = "✅" if accuracy >= 80 else "🟡" if accuracy >= 60 else "🔴"
+                currency_accuracies.append(f"{acc_emoji} {currency}: {accuracy:.0f}%")
+        
+        if currency_accuracies:
+            accuracy_lines.append(" | ".join(currency_accuracies))
+        
+        return "\n".join(accuracy_lines)
+    
+    def _format_surprises_section(self, surprises: List[Dict]) -> str:
+        """
+        Format surprises section for major forecast mismatches.
+        Phase 4: New method for highlighting prediction surprises.
+        
+        Args:
+            surprises: List of surprise event dictionaries
+            
+        Returns:
+            str: Formatted surprises section
+        """
+        if not surprises:
+            return ""
+        
+        surprise_lines = ["\n**🚨 Market Surprises:**"]
+        
+        for surprise in surprises[:3]:  # Limit to top 3 surprises
+            currency = surprise["currency"]
+            event = surprise["event"]
+            forecast_sent = surprise["forecast_sentiment"]
+            actual_sent = surprise["actual_sentiment"]
+            forecast_val = surprise.get("forecast_value")
+            actual_val = surprise.get("actual_value")
+            
+            if forecast_val is not None and actual_val is not None:
+                surprise_lines.append(
+                    f"• **{currency} {event}**: Expected {forecast_sent} (F:{forecast_val:.1f}) "
+                    f"but got **{actual_sent}** (A:{actual_val:.1f})"
+                )
+            else:
+                surprise_lines.append(
+                    f"• **{currency} {event}**: Expected {forecast_sent} but got **{actual_sent}**"
+                )
+        
+        return "\n".join(surprise_lines)
     
     def _format_empty_report(self, week_start: datetime) -> str:
         """Format message when no sentiment data is available."""

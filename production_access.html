@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Access Helper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-6">🚀 Production Environment Access</h1>
+        
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Production URL</h2>
+            <div class="bg-gray-100 p-4 rounded-lg">
+                <code class="text-lg">https://forex-sentiment-analyzer-ct7vuwq4za-uc.a.run.app</code>
+            </div>
+            <button onclick="openProduction()" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+                🌐 Open Production Dashboard
+            </button>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">✅ What to Verify</h2>
+            <div class="space-y-4">
+                <div class="border-l-4 border-green-400 pl-4">
+                    <h3 class="font-medium">1. USD Events Count</h3>
+                    <p class="text-gray-600">Should show <strong>5 events</strong> (not 3)</p>
+                    <ul class="text-sm text-gray-500 mt-2 ml-4">
+                        <li>• Test Event (Bullish)</li>
+                        <li>• FOMC Meeting Minutes (Neutral)</li>
+                        <li>• Unemployment Claims (Bearish) ⚠️ <span class="bg-yellow-100 px-2 py-1 rounded">INVERSE</span></li>
+                        <li>• Prelim GDP q/q (Bullish)</li>
+                        <li>• Core PCE Price Index m/m (Bullish)</li>
+                    </ul>
+                </div>
+                
+                <div class="border-l-4 border-blue-400 pl-4">
+                    <h3 class="font-medium">2. Inversion Logic Applied</h3>
+                    <p class="text-gray-600">Unemployment Claims should show:</p>
+                    <ul class="text-sm text-gray-500 mt-2 ml-4">
+                        <li>• Previous: 227.0 → Forecast: 229.0</li>
+                        <li>• Sentiment: <span class="text-red-600">Bearish</span></li>
+                        <li>• Reason: "Higher forecast for inverse indicator"</li>
+                        <li>• Badge: <span class="bg-yellow-100 px-2 py-1 rounded text-xs">INV</span></li>
+                    </ul>
+                </div>
+                
+                <div class="border-l-4 border-purple-400 pl-4">
+                    <h3 class="font-medium">3. Enhanced Display</h3>
+                    <p class="text-gray-600">Should show detailed event information with:</p>
+                    <ul class="text-sm text-gray-500 mt-2 ml-4">
+                        <li>• Event breakdown (Bullish/Bearish/Neutral counts)</li>
+                        <li>• Detailed reasoning for each sentiment</li>
+                        <li>• Previous vs Forecast values</li>
+                        <li>• Inversion indicators where applicable</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">🔐 Authentication Options</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="border rounded-lg p-4">
+                    <h3 class="font-medium mb-2">Option 1: Direct Access</h3>
+                    <p class="text-sm text-gray-600 mb-3">Since you're logged into gcloud, you should have automatic access</p>
+                    <button onclick="openProduction()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                        Try Direct Access
+                    </button>
+                </div>
+                
+                <div class="border rounded-lg p-4">
+                    <h3 class="font-medium mb-2">Option 2: Get Token</h3>
+                    <p class="text-sm text-gray-600 mb-3">If direct access fails, get an identity token</p>
+                    <div class="bg-gray-100 p-2 rounded text-xs font-mono">
+                        gcloud auth print-identity-token
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">📋 Testing Checklist</h2>
+            <div class="space-y-2">
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" class="rounded">
+                    <span>Production dashboard loads successfully</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" class="rounded">
+                    <span>USD currency shows 5 events (not 3)</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" class="rounded">
+                    <span>Unemployment Claims shows "Bearish" with inverse logic</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" class="rounded">
+                    <span>Event breakdown shows detailed sentiment reasoning</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" class="rounded">
+                    <span>Inversion badges are displayed where applicable</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" class="rounded">
+                    <span>All currency sentiments are calculated correctly</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openProduction() {
+            window.open('https://forex-sentiment-analyzer-ct7vuwq4za-uc.a.run.app', '_blank');
+        }
+    </script>
+</body>
+</html> 

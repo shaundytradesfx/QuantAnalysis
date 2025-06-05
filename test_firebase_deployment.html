@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Deployment Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        .success { background: rgba(40, 167, 69, 0.3); }
+        .error { background: rgba(220, 53, 69, 0.3); }
+        .info { background: rgba(23, 162, 184, 0.3); }
+        .btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background: #218838;
+        }
+        .code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Firebase Deployment Successful!</h1>
+        
+        <div class="status success">
+            ✅ Frontend deployed to Firebase Hosting
+        </div>
+        
+        <div class="status success">
+            ✅ Cloud Run API updated with CORS settings
+        </div>
+        
+        <div class="status info">
+            <strong>Frontend URL:</strong><br>
+            <a href="https://forex-sentiment-frontend.web.app" target="_blank" style="color: #fff;">
+                https://forex-sentiment-frontend.web.app
+            </a>
+        </div>
+        
+        <div class="status info">
+            <strong>API URL:</strong><br>
+            <span class="code">https://forex-sentiment-analyzer-158616853756.us-central1.run.app</span>
+        </div>
+        
+        <h2>🔧 How to Access Your Dashboard</h2>
+        
+        <p><strong>Step 1:</strong> Visit your dashboard</p>
+        <button class="btn" onclick="window.open('https://forex-sentiment-frontend.web.app', '_blank')">
+            🚀 Open Dashboard
+        </button>
+        
+        <p><strong>Step 2:</strong> Get your authentication token</p>
+        <div class="code">gcloud auth print-identity-token</div>
+        
+        <p><strong>Step 3:</strong> Enter token when prompted for API features</p>
+        
+        <h2>📊 System Status</h2>
+        <div id="system-status">
+            <button class="btn" onclick="testAPI()">🔍 Test API Connection</button>
+            <div id="api-result"></div>
+        </div>
+        
+        <h2>🎯 What's Working</h2>
+        <ul>
+            <li>✅ <strong>Public Frontend:</strong> Instant loading, no authentication barriers</li>
+            <li>✅ <strong>Secure API:</strong> Protected with Google Cloud IAM</li>
+            <li>✅ <strong>CORS Configured:</strong> Firebase can communicate with Cloud Run</li>
+            <li>✅ <strong>Automated Scheduling:</strong> Daily scraping, weekly reports</li>
+            <li>✅ <strong>Discord Integration:</strong> Working notifications</li>
+            <li>✅ <strong>Database:</strong> PostgreSQL with current data</li>
+        </ul>
+        
+        <h2>📅 Automated Schedule</h2>
+        <ul>
+            <li><strong>Daily 2:00 AM UTC:</strong> Forex Factory data scraping</li>
+            <li><strong>Daily 3:00 AM UTC:</strong> Sentiment analysis calculation</li>
+            <li><strong>Monday 6:00 AM UTC:</strong> Discord weekly report</li>
+        </ul>
+        
+        <div class="status success">
+            🎉 Your Forex Sentiment Analyzer is now fully operational!
+        </div>
+    </div>
+
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = '<div class="status info">Testing API connection...</div>';
+            
+            try {
+                const response = await fetch('https://forex-sentiment-analyzer-158616853756.us-central1.run.app/api/health');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="status success">
+                            ✅ API Connection Successful!<br>
+                            Status: ${data.status}<br>
+                            Database: ${data.database}<br>
+                            Discord: ${data.discord}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="status error">
+                            ❌ API returned ${response.status}: ${response.statusText}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="status error">
+                        ❌ Connection Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html> 

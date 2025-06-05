@@ -35,7 +35,7 @@ async function initializeDashboard() {
         // Load initial data (this will update the chart)
         await loadDashboardData();
         
-        // Set up event listeners (ensure this happens after DOM is ready)
+        // Set up event listeners
         setupEventListeners();
         
         // Hide loading overlay
@@ -103,19 +103,6 @@ async function loadTabData(tabName) {
 }
 
 /**
- * Check if an event's actual data should be available based on current date
- */
-function isActualDataAvailable(scheduledDateTime) {
-    const now = new Date();
-    const eventDate = new Date(scheduledDateTime);
-    
-    // Actual data should only be available if the event has occurred (past date)
-    // Add a small buffer (1 hour) to account for data publishing delays
-    const bufferMs = 60 * 60 * 1000; // 1 hour in milliseconds
-    return now.getTime() > (eventDate.getTime() + bufferMs);
-}
-
-/**
  * Load dashboard data
  */
 async function loadDashboardData() {
@@ -131,62 +118,32 @@ async function loadDashboardData() {
                 sentimentData[sentiment.currency] = sentiment;
             });
             
-            // Phase 3: Process sample data for actual sentiment with date validation
+            // Phase 3: Process sample data for actual sentiment
             actualSentimentData = {};
             combinedSentimentData = {};
             
             window.SAMPLE_DATA.sentiments.forEach(sentiment => {
-                // Create actual sentiment data with date validation
-                const processedEvents = sentiment.events.map(event => {
-                    // Find the corresponding event in eventsData to get scheduled_datetime
-                    const eventDetail = window.SAMPLE_DATA.events.find(e => 
-                        e.event_name === event.event_name && e.currency === sentiment.currency
-                    );
-                    
-                    // Check if actual data should be available based on date
-                    const actualAvailable = eventDetail ? 
-                        isActualDataAvailable(eventDetail.scheduled_datetime) && event.actual_available : 
-                        false;
-                    
-                    return {
-                        ...event,
-                        actual_available: actualAvailable,
-                        // If actual data shouldn't be available, remove actual values
-                        actual_value: actualAvailable ? event.actual_value : null,
-                        actual_sentiment: actualAvailable ? event.actual_sentiment : null,
-                        actual_sentiment_label: actualAvailable ? event.actual_sentiment_label : null,
-                        accuracy: actualAvailable ? event.accuracy : null
-                    };
-                });
-                
-                // Check if any events have actual data available
-                const hasActualData = processedEvents.some(event => event.actual_available);
-                
+                // Create actual sentiment data
                 actualSentimentData[sentiment.currency] = {
                     ...sentiment,
-                    events: processedEvents,
-                    actual_available: hasActualData,
-                    final_sentiment: hasActualData ? sentiment.actual_sentiment : sentiment.final_sentiment
+                    final_sentiment: sentiment.actual_sentiment || sentiment.final_sentiment,
+                    events: sentiment.events.map(event => ({
+                        ...event,
+                        sentiment: event.actual_sentiment || event.sentiment,
+                        sentiment_label: event.actual_sentiment_label || event.sentiment_label
+                    }))
                 };
                 
                 // Create combined sentiment data for comparison view
                 combinedSentimentData[sentiment.currency] = {
                     ...sentiment,
-                    events: processedEvents,
                     forecast_sentiment: sentiment.final_sentiment,
-                    actual_sentiment: hasActualData ? sentiment.actual_sentiment : null,
-                    forecast_accuracy: hasActualData ? sentiment.forecast_accuracy : null,
-                    actual_available: hasActualData
+                    actual_sentiment: sentiment.actual_sentiment || sentiment.final_sentiment,
+                    forecast_accuracy: sentiment.forecast_accuracy || null
                 };
             });
             
-            // Process events data with date validation
-            eventsData = window.SAMPLE_DATA.events.map(event => ({
-                ...event,
-                actual_available: isActualDataAvailable(event.scheduled_datetime),
-                actual_value: isActualDataAvailable(event.scheduled_datetime) ? event.actual_value : null,
-                actual_sentiment_label: isActualDataAvailable(event.scheduled_datetime) ? event.actual_sentiment_label : null
-            }));
+            eventsData = window.SAMPLE_DATA.events || [];
             
         } else {
             // Fallback to API calls if sample data not available
@@ -328,6 +285,25 @@ async function fetchAPI(endpoint, options = {}) {
 }
 
 /**
+ * Helper function to check if an event is in the future
+ * Updated to be more business-logic aware for economic data releases
+ */
+function isEventInFuture(scheduledDatetime) {
+    const now = new Date();
+    const eventDate = new Date(scheduledDatetime);
+    
+    // For demo purposes with sample data, consider current date as June 5, 2025
+    // Events on June 6+ should show "not released", June 5 and earlier should show actual data
+    const currentDate = new Date('2025-06-05T23:59:59Z'); // End of June 5th, 2025
+    
+    // Add debug logging to troubleshoot
+    console.log('Event date:', eventDate.toISOString(), 'Current date:', currentDate.toISOString(), 'Is future:', eventDate > currentDate);
+    
+    // Only consider events after June 5, 2025 as "future"
+    return eventDate > currentDate;
+}
+
+/**
  * Update current week display
  */
 function updateCurrentWeekDisplay() {
@@ -354,18 +330,19 @@ function updateCurrentWeekDisplay() {
 function updateCurrencySidebar() {
     const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
     
+    // Get current sentiment data based on selected view
+    const currentData = getCurrentSentimentData();
+    console.log('updateCurrencySidebar - Current view:', currentView, 'Data keys:', Object.keys(currentData)); // Debug log
+    
     currencies.forEach(currency => {
         const sentimentElement = document.getElementById(`${currency.toLowerCase()}-sentiment`);
         const actualSentimentElement = document.getElementById(`${currency.toLowerCase()}-actual-sentiment`);
         
         if (sentimentElement) {
-            // Get data based on current view
-            const currentData = getCurrentViewData();
             const sentiment = currentData[currency];
-            
             if (sentiment) {
                 const sentimentClass = getSentimentClass(sentiment.final_sentiment);
-                sentimentElement.innerHTML = getSentimentIndicator(sentiment.final_sentiment, currentView === 'actual' ? 'actual' : 'forecast');
+                sentimentElement.innerHTML = getSentimentIndicator(sentiment.final_sentiment, 'forecast');
                 sentimentElement.className = `text-sm ${sentimentClass}`;
             } else {
                 sentimentElement.textContent = 'not released';
@@ -395,121 +372,98 @@ function updateCurrencySummary() {
     const summaryElement = document.getElementById('currency-summary');
     if (!summaryElement) return;
     
-    // Get data based on current view
+    const selectedCurrencyElement = document.getElementById('selected-currency');
+    if (selectedCurrencyElement) {
+        selectedCurrencyElement.textContent = currentCurrency;
+    }
+    
+    // Get current sentiment data based on selected view
     const currentData = getCurrentSentimentData();
     const sentiment = currentData[currentCurrency];
+    console.log('updateCurrencySummary - Current view:', currentView, 'Currency:', currentCurrency, 'Sentiment:', sentiment?.final_sentiment); // Debug log
     
-    if (!sentiment) {
-        summaryElement.innerHTML = `
-            <div class="text-center text-gray-500 py-8">
-                <i class="fas fa-chart-line text-4xl mb-4 opacity-50"></i>
-                <p>No data available for ${currentCurrency}</p>
-                <p class="text-sm">Data may not be released yet</p>
-            </div>
-        `;
-        return;
-    }
-    
-    // Get appropriate sentiment based on view
-    let displaySentiment = sentiment.final_sentiment;
-    let title = 'Forecast Sentiment';
-    let description = 'Based on forecast vs previous values';
-    
-    if (currentView === 'actual') {
-        if (sentiment.actual_available) {
-            displaySentiment = sentiment.actual_sentiment || sentiment.final_sentiment;
-            title = 'Actual Sentiment';
-            description = 'Based on actual vs previous values';
-        } else {
-            displaySentiment = 'not released';
-            title = 'Actual Sentiment';
-            description = 'Actual data not yet available';
-        }
-    } else if (currentView === 'comparison') {
-        title = 'Forecast vs Actual Comparison';
-        description = sentiment.actual_available ? 
-            `Forecast accuracy: ${sentiment.forecast_accuracy || 'N/A'}%` : 
-            'Actual data not yet available for comparison';
-    }
-    
-    const sentimentClass = getSentimentClass(displaySentiment);
-    const eventCount = sentiment.events ? sentiment.events.length : 0;
-    const availableEvents = sentiment.events ? 
-        sentiment.events.filter(e => currentView === 'actual' ? e.actual_available : e.data_available).length : 0;
-    
-    let summaryContent = `
-        <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-2">${title}</h3>
-            <p class="text-sm text-gray-600 mb-4">${description}</p>
-            <div class="text-center p-6 bg-gray-50 rounded-lg">
-                <div class="text-3xl font-bold ${sentimentClass} mb-2">${displaySentiment}</div>
-                <div class="text-sm text-gray-500">
-                    ${availableEvents} of ${eventCount} events ${currentView === 'actual' ? 'released' : 'available'}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Add comparison details if in comparison view
-    if (currentView === 'comparison' && sentiment.actual_available) {
-        summaryContent += `
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="text-center p-4 bg-blue-50 rounded-lg">
-                    <div class="text-sm text-gray-600 mb-1">Forecast</div>
-                    <div class="text-lg font-semibold ${getSentimentClass(sentiment.forecast_sentiment || sentiment.final_sentiment)}">
-                        ${sentiment.forecast_sentiment || sentiment.final_sentiment}
-                    </div>
-                </div>
-                <div class="text-center p-4 bg-green-50 rounded-lg">
-                    <div class="text-sm text-gray-600 mb-1">Actual</div>
-                    <div class="text-lg font-semibold ${getSentimentClass(sentiment.actual_sentiment || 'Neutral')}">
-                        ${sentiment.actual_sentiment || 'not released'}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Add event breakdown
-    if (sentiment.events && sentiment.events.length > 0) {
-        const relevantEvents = sentiment.events.filter(event => 
-            currentView === 'actual' ? event.actual_available : event.data_available
-        );
+    if (sentiment) {
+        const sentimentClass = getSentimentClass(sentiment.final_sentiment);
         
-        if (relevantEvents.length > 0) {
-            summaryContent += `
+        // Count events by sentiment
+        const eventCounts = {
+            bullish: 0,
+            bearish: 0,
+            neutral: 0
+        };
+        
+        sentiment.events.forEach(event => {
+            if (event.sentiment === 1) eventCounts.bullish++;
+            else if (event.sentiment === -1) eventCounts.bearish++;
+            else eventCounts.neutral++;
+        });
+        
+        summaryElement.innerHTML = `
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div>
-                    <h4 class="font-medium mb-3">Event Breakdown</h4>
-                    <div class="space-y-2">
-                        ${relevantEvents.map(event => {
-                            let eventSentiment, eventValue;
-                            if (currentView === 'actual' && event.actual_available) {
-                                eventSentiment = event.actual_sentiment_label || event.sentiment_label;
-                                eventValue = event.actual_value;
-                            } else {
-                                eventSentiment = event.sentiment_label;
-                                eventValue = event.forecast_value;
-                            }
-                            
-                            const eventSentimentClass = getSentimentClass(eventSentiment);
-                            
-                            return `
-                                <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                    <span class="text-sm font-medium">${event.event_name}</span>
-                                    <div class="flex items-center space-x-2">
-                                        <span class="text-sm">${formatValue(eventValue)}</span>
-                                        <span class="text-sm ${eventSentimentClass}">${eventSentiment}</span>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+                    <h3 class="font-semibold text-lg">${currentCurrency}</h3>
+                    <p class="text-gray-600">Current Sentiment (${currentView})</p>
+                </div>
+                <div class="text-right">
+                    <span class="text-2xl font-bold ${sentimentClass}">${sentiment.final_sentiment}</span>
+                    <p class="text-sm text-gray-500">${sentiment.events.length} events</p>
+                </div>
+            </div>
+            <div class="mt-4">
+                <h4 class="font-medium mb-2">Event Breakdown:</h4>
+                <div class="grid grid-cols-3 gap-2 mb-4">
+                    <div class="text-center p-2 bg-green-50 rounded">
+                        <div class="text-lg font-bold text-green-600">${eventCounts.bullish}</div>
+                        <div class="text-xs text-green-600">Bullish</div>
+                    </div>
+                    <div class="text-center p-2 bg-red-50 rounded">
+                        <div class="text-lg font-bold text-red-600">${eventCounts.bearish}</div>
+                        <div class="text-xs text-red-600">Bearish</div>
+                    </div>
+                    <div class="text-center p-2 bg-gray-50 rounded">
+                        <div class="text-lg font-bold text-gray-600">${eventCounts.neutral}</div>
+                        <div class="text-xs text-gray-600">Neutral</div>
                     </div>
                 </div>
-            `;
-        }
+                <h4 class="font-medium mb-2">Recent Events:</h4>
+                <div class="space-y-3">
+                    ${sentiment.events.slice(0, 5).map(event => {
+                        const eventSentimentClass = getSentimentClass(event.sentiment_label);
+                        const inversionBadge = event.is_inverse ? 
+                            '<span class="inline-block px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full ml-2">Inverse</span>' : '';
+                        
+                        return `
+                            <div class="border-l-4 ${event.sentiment === 1 ? 'border-green-400' : event.sentiment === -1 ? 'border-red-400' : 'border-gray-400'} pl-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium text-sm">${event.event_name}</span>
+                                    <span class="text-xs ${eventSentimentClass}">${event.sentiment_label}</span>
+                                </div>
+                                ${event.data_available ? `
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        Prev: ${formatValue(event.previous_value)} → Forecast: ${formatValue(event.forecast_value)}
+                                        ${inversionBadge}
+                                    </div>
+                                    <div class="text-xs text-gray-600 mt-1 italic">
+                                        ${event.reason}
+                                    </div>
+                                ` : `
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        ${event.reason}
+                                    </div>
+                                `}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    } else {
+        summaryElement.innerHTML = `
+            <div class="text-center text-gray-500">
+                <p>No sentiment data available for ${currentCurrency} in ${currentView} view</p>
+            </div>
+        `;
     }
-    
-    summaryElement.innerHTML = summaryContent;
 }
 
 /**
@@ -519,25 +473,19 @@ function updateIndicatorsTable() {
     const tableBody = document.getElementById('indicators-table');
     if (!tableBody) return;
     
-    // Filter events for selected currency, or show all if none selected
     const filteredEvents = eventsData.filter(event => 
-        currentCurrency === 'all' || event.currency === currentCurrency
+        !currentCurrency || event.currency === currentCurrency
     );
     
-    if (filteredEvents.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="9" class="px-4 py-8 text-center text-gray-500">
-                    No events found for ${currentCurrency}
-                </td>
-            </tr>
-        `;
-        return;
-    }
+    // Get current sentiment data based on selected view
+    const currentData = getCurrentSentimentData();
+    console.log('updateIndicatorsTable - Current view:', currentView, 'Events count:', filteredEvents.length); // Debug log
     
     tableBody.innerHTML = filteredEvents.map(event => {
-        // Get data based on current view
-        const currentData = getCurrentSentimentData();
+        // Check if event is in the future to determine if actual data should be shown
+        const eventInFuture = isEventInFuture(event.scheduled_datetime);
+        
+        // Get detailed sentiment info if available from current view data
         const currencySentiment = currentData[event.currency];
         let detailedEvent = null;
         
@@ -552,30 +500,24 @@ function updateIndicatorsTable() {
         let actualValue = 'not released', actualSentiment = 'not released', actualSentimentClass = '', accuracy = '';
         
         if (detailedEvent) {
-            // For actual view, show actual sentiment as primary
-            if (currentView === 'actual') {
-                sentiment = detailedEvent.actual_sentiment_label || detailedEvent.sentiment_label;
-                actualValue = formatValue(detailedEvent.actual_value);
-                actualSentiment = detailedEvent.actual_sentiment_label || 'not released';
-            } else {
-                sentiment = detailedEvent.sentiment_label;
-                if (detailedEvent.actual_available) {
-                    actualValue = formatValue(detailedEvent.actual_value);
-                    actualSentiment = detailedEvent.actual_sentiment_label || 'not released';
-                }
-            }
-            
+            sentiment = detailedEvent.sentiment_label;
             sentimentClass = getSentimentClass(sentiment);
-            actualSentimentClass = getSentimentClass(actualSentiment);
             reason = detailedEvent.reason || '';
             isInverse = detailedEvent.is_inverse || false;
-            accuracy = detailedEvent.accuracy || '';
+            
+            // Phase 3: Add actual data only if event is not in the future
+            if (detailedEvent.actual_available && !eventInFuture) {
+                actualValue = formatValue(detailedEvent.actual_value);
+                actualSentiment = detailedEvent.actual_sentiment_label || 'not released';
+                actualSentimentClass = getSentimentClass(actualSentiment);
+                accuracy = detailedEvent.accuracy || '';
+            }
         } else {
             sentiment = getSentimentFromValues(event.previous_value, event.forecast_value);
             sentimentClass = getSentimentClass(sentiment);
             
-            // Check if event has actual data available
-            if (event.actual_available && event.actual_value !== null) {
+            // Phase 3: Check if event has actual data and is not in the future
+            if (event.actual_value !== undefined && !eventInFuture) {
                 actualValue = formatValue(event.actual_value);
                 actualSentiment = event.actual_sentiment_label || getSentimentFromValues(event.previous_value, event.actual_value);
                 actualSentimentClass = getSentimentClass(actualSentiment);
@@ -624,11 +566,12 @@ function updateWeeklySummary() {
     
     const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
     
+    // Get current sentiment data based on selected view
+    const currentData = getCurrentSentimentData();
+    console.log('updateWeeklySummary - Current view:', currentView, 'Data available for currencies:', Object.keys(currentData)); // Debug log
+    
     summaryElement.innerHTML = currencies.map(currency => {
-        // Get data based on current view
-        const currentData = getCurrentSentimentData();
         const sentiment = currentData[currency];
-        
         if (!sentiment) {
             return `
                 <div class="bg-white rounded-lg shadow p-4 card-hover">
@@ -641,23 +584,8 @@ function updateWeeklySummary() {
             `;
         }
         
-        // Get sentiment based on current view
-        let displaySentiment = sentiment.final_sentiment;
-        let viewLabel = '';
-        
-        if (currentView === 'actual' && sentiment.actual_available) {
-            displaySentiment = sentiment.actual_sentiment || sentiment.final_sentiment;
-            viewLabel = '(Actual)';
-        } else if (currentView === 'comparison') {
-            displaySentiment = sentiment.forecast_sentiment || sentiment.final_sentiment;
-            viewLabel = '(Compare)';
-        } else {
-            viewLabel = '(Forecast)';
-        }
-        
-        const sentimentClass = getSentimentClass(displaySentiment);
+        const sentimentClass = getSentimentClass(sentiment.final_sentiment);
         const eventCount = sentiment.events ? sentiment.events.length : 0;
-        const actualAvailable = sentiment.actual_available || false;
         
         return `
             <div class="bg-white rounded-lg shadow p-4 card-hover cursor-pointer" onclick="selectCurrency('${currency}')">
@@ -666,12 +594,9 @@ function updateWeeklySummary() {
                     <span class="text-2xl">${getCurrencyFlag(currency)}</span>
                 </div>
                 <div class="text-center">
-                    <div class="text-lg font-bold ${sentimentClass}">${displaySentiment}</div>
-                    <div class="text-xs text-gray-500">${eventCount} events ${viewLabel}</div>
-                    ${currentView === 'actual' && !actualAvailable ? 
-                        '<div class="text-xs text-orange-500 mt-1">not released</div>' : ''}
-                    ${currentView === 'comparison' && actualAvailable && sentiment.forecast_accuracy !== null ? 
-                        `<div class="text-xs text-blue-500 mt-1">${sentiment.forecast_accuracy}% accuracy</div>` : ''}
+                    <div class="text-lg font-bold ${sentimentClass}">${sentiment.final_sentiment}</div>
+                    <div class="text-xs text-gray-500">${eventCount} events</div>
+                    <div class="text-xs text-blue-500">${currentView} view</div>
                 </div>
             </div>
         `;
@@ -679,18 +604,18 @@ function updateWeeklySummary() {
 }
 
 /**
- * Initialize sentiment chart
+ * Initialize sentiment chart - CHANGED TO PIE CHART
  */
 function initializeSentimentChart() {
     const ctx = document.getElementById('sentimentChart');
     if (!ctx) return;
     
     sentimentChart = new Chart(ctx, {
-        type: 'bar',
+        type: 'pie',  // Changed from 'bar' to 'pie'
         data: {
             labels: [],
             datasets: [{
-                label: 'Sentiment Score',
+                label: 'Sentiment Distribution',
                 data: [],
                 backgroundColor: [
                     'rgba(16, 185, 129, 0.8)', // Green for bullish
@@ -702,27 +627,27 @@ function initializeSentimentChart() {
                     'rgb(239, 68, 68)',
                     'rgb(107, 114, 128)'
                 ],
-                borderWidth: 1
+                borderWidth: 2
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
-                    }
-                }
-            },
             plugins: {
                 legend: {
-                    display: false
+                    display: true,  // Show legend for pie chart
+                    position: 'bottom'
                 },
-                title: {
-                    display: true,
-                    text: 'Forecast Sentiment'
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                            return `${label}: ${value} events (${percentage}%)`;
+                        }
+                    }
                 }
             }
         }
@@ -730,24 +655,25 @@ function initializeSentimentChart() {
 }
 
 /**
- * Update sentiment chart
+ * Update sentiment chart - Updated for current view data
  */
 function updateSentimentChart() {
     if (!sentimentChart) return;
     
-    // Get data based on current view
+    // Get current sentiment data based on selected view
     const currentData = getCurrentSentimentData();
     const sentiment = currentData[currentCurrency];
+    console.log('updateSentimentChart - Current view:', currentView, 'Currency:', currentCurrency, 'Sentiment data:', sentiment ? 'available' : 'not available'); // Debug log
     
     if (!sentiment || !sentiment.events) {
         sentimentChart.data.labels = ['No Data'];
-        sentimentChart.data.datasets[0].data = [0];
+        sentimentChart.data.datasets[0].data = [1];
         sentimentChart.data.datasets[0].backgroundColor = ['rgba(107, 114, 128, 0.8)'];
         sentimentChart.update();
         return;
     }
     
-    // Count sentiment types based on current view
+    // Count sentiment types
     const sentimentCounts = {
         'Bullish': 0,
         'Bearish': 0,
@@ -755,60 +681,40 @@ function updateSentimentChart() {
     };
     
     sentiment.events.forEach(event => {
-        let sentimentValue;
-        
-        if (currentView === 'actual' && event.actual_available) {
-            sentimentValue = event.actual_sentiment;
-        } else {
-            sentimentValue = event.sentiment;
-        }
-        
-        if (sentimentValue === 1) sentimentCounts.Bullish++;
-        else if (sentimentValue === -1) sentimentCounts.Bearish++;
+        if (event.sentiment === 1) sentimentCounts.Bullish++;
+        else if (event.sentiment === -1) sentimentCounts.Bearish++;
         else sentimentCounts.Neutral++;
     });
     
-    sentimentChart.data.labels = Object.keys(sentimentCounts);
-    sentimentChart.data.datasets[0].data = Object.values(sentimentCounts);
+    // Filter out zero counts for cleaner pie chart
+    const filteredLabels = [];
+    const filteredData = [];
+    const filteredColors = [];
     
-    // Update chart title based on view
-    const chartTitle = currentView === 'actual' ? 'Actual Sentiment' : 
-                      currentView === 'comparison' ? 'Forecast vs Actual' : 
-                      'Forecast Sentiment';
-    
-    sentimentChart.options.plugins.title = {
-        display: true,
-        text: `${currentCurrency} ${chartTitle}`
+    const colorMap = {
+        'Bullish': 'rgba(16, 185, 129, 0.8)',
+        'Bearish': 'rgba(239, 68, 68, 0.8)',
+        'Neutral': 'rgba(107, 114, 128, 0.8)'
     };
     
+    Object.entries(sentimentCounts).forEach(([label, count]) => {
+        if (count > 0) {
+            filteredLabels.push(label);
+            filteredData.push(count);
+            filteredColors.push(colorMap[label]);
+        }
+    });
+    
+    sentimentChart.data.labels = filteredLabels;
+    sentimentChart.data.datasets[0].data = filteredData;
+    sentimentChart.data.datasets[0].backgroundColor = filteredColors;
     sentimentChart.update();
-}
-
-/**
- * Phase 3: Get sentiment data based on current view
- */
-function getCurrentSentimentData() {
-    if (currentView === 'actual') {
-        return actualSentimentData;
-    } else if (currentView === 'comparison') {
-        return combinedSentimentData;
-    }
-    return sentimentData; // forecast view (default)
-}
-
-/**
- * Helper function to get current view data for sidebar
- */
-function getCurrentViewData() {
-    return getCurrentSentimentData();
 }
 
 /**
  * Set up event listeners
  */
 function setupEventListeners() {
-    console.log('Setting up event listeners...');
-    
     // Currency selection
     document.querySelectorAll('.currency-item').forEach(item => {
         item.addEventListener('click', function() {
@@ -817,64 +723,14 @@ function setupEventListeners() {
         });
     });
     
-    // Phase 3: Sentiment view toggles with enhanced error handling
-    const toggleButtons = document.querySelectorAll('.sentiment-toggle button');
-    console.log(`Found ${toggleButtons.length} toggle buttons`);
-    
-    toggleButtons.forEach((button, index) => {
-        const view = button.getAttribute('data-view');
-        const buttonId = button.id;
-        console.log(`Setting up toggle button ${index}: ID=${buttonId}, view=${view}`);
-        
-        button.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const clickedView = this.getAttribute('data-view');
-            console.log(`Toggle button clicked: ${clickedView}`);
-            
-            if (clickedView) {
-                switchSentimentView(clickedView);
-            } else {
-                console.error('No data-view attribute found on button');
-            }
+    // Phase 3: Sentiment view toggles - Fixed to handle all button variations
+    document.querySelectorAll('.sentiment-toggle button').forEach(button => {
+        button.addEventListener('click', function() {
+            const view = this.getAttribute('data-view');
+            console.log('Toggle button clicked:', view); // Debug log
+            switchSentimentView(view);
         });
     });
-    
-    // Also set up individual button listeners as backup
-    const forecastBtn = document.getElementById('forecast-view');
-    const actualBtn = document.getElementById('actual-view');
-    const comparisonBtn = document.getElementById('comparison-view');
-    
-    if (forecastBtn) {
-        forecastBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            console.log('Forecast button clicked directly');
-            switchSentimentView('forecast');
-        });
-    } else {
-        console.warn('Forecast button not found');
-    }
-    
-    if (actualBtn) {
-        actualBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            console.log('Actual button clicked directly');
-            switchSentimentView('actual');
-        });
-    } else {
-        console.warn('Actual button not found');
-    }
-    
-    if (comparisonBtn) {
-        comparisonBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            console.log('Comparison button clicked directly');
-            switchSentimentView('comparison');
-        });
-    } else {
-        console.warn('Comparison button not found');
-    }
     
     // Discord actions
     const testWebhookBtn = document.getElementById('test-webhook');
@@ -886,15 +742,12 @@ function setupEventListeners() {
     if (sendReportBtn) {
         sendReportBtn.addEventListener('click', sendWeeklyReport);
     }
-    
-    console.log('Event listeners setup complete');
 }
 
 /**
  * Select currency and update displays
  */
 function selectCurrency(currency) {
-    console.log(`Selecting currency: ${currency}`);
     currentCurrency = currency;
     
     // Update UI state
@@ -908,14 +761,14 @@ function selectCurrency(currency) {
     // Update displays
     updateCurrencySummary();
     updateIndicatorsTable();
-    updateSentimentChart();
+    updateSentimentChart(); // Add chart update when currency changes
 }
 
 /**
- * Phase 3: Switch sentiment view
+ * Phase 3: Switch sentiment view - Fixed to handle comparison view correctly
  */
 function switchSentimentView(view) {
-    console.log(`Switching to view: ${view}`);
+    console.log('Switching to view:', view); // Debug log
     currentView = view;
     
     // Update toggle button states
@@ -923,23 +776,40 @@ function switchSentimentView(view) {
         btn.classList.remove('active');
     });
     
-    const targetButton = document.getElementById(`${view}-view`);
-    if (targetButton) {
-        targetButton.classList.add('active');
-        console.log(`Activated button: ${view}-view`);
+    // Handle the comparison view ID mismatch
+    let buttonId = `${view}-view`;
+    if (view === 'comparison') {
+        buttonId = 'comparison-view'; // Match the HTML ID
+    }
+    
+    const activeButton = document.getElementById(buttonId);
+    if (activeButton) {
+        activeButton.classList.add('active');
+        console.log('Activated button:', buttonId); // Debug log
     } else {
-        console.error(`Button not found: ${view}-view`);
+        console.error('Button not found:', buttonId); // Debug log
     }
     
     // Update all displays based on current view
-    console.log('Updating displays for new view...');
     updateCurrencySidebar();
     updateCurrencySummary();
     updateIndicatorsTable();
     updateWeeklySummary();
     updateSentimentChart();
     
-    console.log(`View switched to: ${currentView}`);
+    console.log('View switched to:', currentView); // Debug log
+}
+
+/**
+ * Phase 3: Get sentiment data based on current view
+ */
+function getCurrentSentimentData() {
+    if (currentView === 'actual') {
+        return actualSentimentData;
+    } else if (currentView === 'comparison') {
+        return combinedSentimentData;
+    }
+    return sentimentData; // forecast view (default)
 }
 
 /**

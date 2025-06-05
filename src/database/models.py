@@ -31,7 +31,7 @@ class Event(Base):
 
 class Indicator(Base):
     """
-    Economic indicator values (previous and forecast).
+    Economic indicator values (previous, forecast, and actual).
     """
     __tablename__ = "indicators"
 
@@ -40,12 +40,18 @@ class Indicator(Base):
     previous_value = Column(Float, nullable=True)  # Raw previous release value
     forecast_value = Column(Float, nullable=True)  # Raw forecast value
     timestamp_collected = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    # New columns for actual data collection (Phase 1)
+    actual_value = Column(Float, nullable=True)  # Store actual released values
+    actual_collected_at = Column(DateTime(timezone=True), nullable=True)  # When actual data was retrieved
+    actual_sentiment = Column(Integer, nullable=True)  # Sentiment based on actual vs previous (-1, 0, 1)
+    is_actual_available = Column(Boolean, default=False, index=True)  # Flag if actual data exists
 
     # Relationship to event
     event = relationship("Event", back_populates="indicators")
     
     def __repr__(self):
-        return f"<Indicator(id={self.id}, event_id={self.event_id}, previous={self.previous_value}, forecast={self.forecast_value})>"
+        return f"<Indicator(id={self.id}, event_id={self.event_id}, previous={self.previous_value}, forecast={self.forecast_value}, actual={self.actual_value})>"
 
 
 class Sentiment(Base):

@@ -271,6 +271,7 @@ class ForexFactoryScraper:
                 date_str = item.get('date', '').strip()
                 forecast_str = item.get('forecast', '').strip()
                 previous_str = item.get('previous', '').strip()
+                actual_str = item.get('actual', '').strip()  # Extract actual value
                 
                 # Skip if missing essential data
                 if not all([title, country, date_str]):
@@ -290,6 +291,7 @@ class ForexFactoryScraper:
                 # Parse numeric values
                 previous_value = self._parse_numeric_value(previous_str)
                 forecast_value = self._parse_numeric_value(forecast_str)
+                actual_value = self._parse_numeric_value(actual_str)  # Parse actual value
                 
                 # Create event
                 event = {
@@ -298,11 +300,12 @@ class ForexFactoryScraper:
                     "scheduled_datetime": scheduled_datetime,
                     "impact_level": impact_level,
                     "previous_value": previous_value,
-                    "forecast_value": forecast_value
+                    "forecast_value": forecast_value,
+                    "actual_value": actual_value  # Include actual value in event data
                 }
                 
                 events.append(event)
-                logger.debug(f"Parsed event: {country} - {title} at {scheduled_datetime}")
+                logger.debug(f"Parsed event: {country} - {title} at {scheduled_datetime}, actual: {actual_value}")
                 
             except Exception as e:
                 logger.warning(f"Error parsing event {item}: {e}")
@@ -393,6 +396,7 @@ class ForexFactoryScraper:
             event_cell = row.find('td', class_='calendar__event')
             previous_cell = row.find('td', class_='calendar__previous')
             forecast_cell = row.find('td', class_='calendar__forecast')
+            actual_cell = row.find('td', class_='calendar__actual')  # Add actual cell
             
             # Skip if any required cell is missing
             if not all([time_cell, currency_cell, event_cell]):
@@ -404,6 +408,7 @@ class ForexFactoryScraper:
             event_name = event_cell.text.strip() if event_cell else ""
             previous_value = self._parse_numeric_value(previous_cell.text.strip()) if previous_cell else None
             forecast_value = self._parse_numeric_value(forecast_cell.text.strip()) if forecast_cell else None
+            actual_value = self._parse_numeric_value(actual_cell.text.strip()) if actual_cell else None  # Parse actual value
             
             # Create datetime object
             event_time = self._parse_time(time_str)
@@ -422,7 +427,8 @@ class ForexFactoryScraper:
                     "scheduled_datetime": scheduled_datetime,
                     "impact_level": impact_level,
                     "previous_value": previous_value,
-                    "forecast_value": forecast_value
+                    "forecast_value": forecast_value,
+                    "actual_value": actual_value  # Include actual value in event data
                 })
         
         logger.info(f"Scraped {len(events)} high-impact events from HTML.")

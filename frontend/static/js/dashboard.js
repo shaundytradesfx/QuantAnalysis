@@ -369,7 +369,7 @@ function updateCurrencySidebar() {
                 sentimentElement.className = `text-sm ${sentimentClass}`;
             } else {
                 sentimentElement.textContent = 'not released';
-                sentimentElement.className = 'text-sm text-gray-400';
+                sentimentElement.className = 'text-sm text-black';
             }
         }
         
@@ -382,7 +382,7 @@ function updateCurrencySidebar() {
                 actualSentimentElement.className = `text-xs opacity-75 ${actualSentimentClass}`;
             } else {
                 actualSentimentElement.textContent = 'Actual: not released';
-                actualSentimentElement.className = 'text-xs opacity-75 text-gray-400';
+                actualSentimentElement.className = 'text-xs opacity-75 text-black';
             }
         }
     });
@@ -401,10 +401,10 @@ function updateCurrencySummary() {
     
     if (!sentiment) {
         summaryElement.innerHTML = `
-            <div class="text-center text-gray-500 py-8">
+            <div class="text-center text-black py-8">
                 <i class="fas fa-chart-line text-4xl mb-4 opacity-50"></i>
                 <p>No data available for ${currentCurrency}</p>
-                <p class="text-sm">Data may not be released yet</p>
+                <p class="text-sm text-black">Data may not be released yet</p>
             </div>
         `;
         return;
@@ -439,11 +439,11 @@ function updateCurrencySummary() {
     
     let summaryContent = `
         <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-2">${title}</h3>
-            <p class="text-sm text-gray-600 mb-4">${description}</p>
+            <h3 class="text-lg font-semibold text-black mb-2">${title}</h3>
+            <p class="text-sm text-black mb-4">${description}</p>
             <div class="text-center p-6 bg-gray-50 rounded-lg">
                 <div class="text-3xl font-bold ${sentimentClass} mb-2">${displaySentiment}</div>
-                <div class="text-sm text-gray-500">
+                <div class="text-sm text-black">
                     ${availableEvents} of ${eventCount} events ${currentView === 'actual' ? 'released' : 'available'}
                 </div>
             </div>
@@ -455,13 +455,13 @@ function updateCurrencySummary() {
         summaryContent += `
             <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="text-center p-4 bg-blue-50 rounded-lg">
-                    <div class="text-sm text-gray-600 mb-1">Forecast</div>
+                    <div class="text-sm text-black mb-1">Forecast</div>
                     <div class="text-lg font-semibold ${getSentimentClass(sentiment.forecast_sentiment || sentiment.final_sentiment)}">
                         ${sentiment.forecast_sentiment || sentiment.final_sentiment}
                     </div>
                 </div>
                 <div class="text-center p-4 bg-green-50 rounded-lg">
-                    <div class="text-sm text-gray-600 mb-1">Actual</div>
+                    <div class="text-sm text-black mb-1">Actual</div>
                     <div class="text-lg font-semibold ${getSentimentClass(sentiment.actual_sentiment || 'Neutral')}">
                         ${sentiment.actual_sentiment || 'not released'}
                     </div>
@@ -479,7 +479,7 @@ function updateCurrencySummary() {
         if (relevantEvents.length > 0) {
             summaryContent += `
                 <div>
-                    <h4 class="font-medium mb-3">Event Breakdown</h4>
+                    <h4 class="font-medium text-black mb-3">Event Breakdown</h4>
                     <div class="space-y-2">
                         ${relevantEvents.map(event => {
                             let eventSentiment, eventValue;
@@ -495,9 +495,9 @@ function updateCurrencySummary() {
                             
                             return `
                                 <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                    <span class="text-sm font-medium">${event.event_name}</span>
+                                    <span class="text-sm font-medium text-black">${event.event_name}</span>
                                     <div class="flex items-center space-x-2">
-                                        <span class="text-sm">${formatValue(eventValue)}</span>
+                                        <span class="text-sm text-black">${formatValue(eventValue)}</span>
                                         <span class="text-sm ${eventSentimentClass}">${eventSentiment}</span>
                                     </div>
                                 </div>
@@ -527,7 +527,7 @@ function updateIndicatorsTable() {
     if (filteredEvents.length === 0) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                <td colspan="9" class="px-4 py-8 text-center text-black">
                     No events found for ${currentCurrency}
                 </td>
             </tr>
@@ -588,13 +588,13 @@ function updateIndicatorsTable() {
         return `
             <tr class="hover:bg-gray-50">
                 <td class="px-4 py-3 text-sm">
-                    <div class="font-medium">${event.event_name}</div>
-                    ${reason ? `<div class="text-xs text-gray-500 mt-1 italic">${reason}</div>` : ''}
+                    <div class="font-medium text-black">${event.event_name}</div>
+                    ${reason ? `<div class="text-xs text-black mt-1 italic">${reason}</div>` : ''}
                 </td>
-                <td class="px-4 py-3 text-sm font-medium">${event.currency}</td>
-                <td class="px-4 py-3 text-sm">${formatValue(event.previous_value)}</td>
-                <td class="px-4 py-3 text-sm">${formatValue(event.forecast_value)}</td>
-                <td class="px-4 py-3 text-sm">${actualValue}</td>
+                <td class="px-4 py-3 text-sm font-medium text-black">${event.currency}</td>
+                <td class="px-4 py-3 text-sm text-black">${formatValue(event.previous_value)}</td>
+                <td class="px-4 py-3 text-sm text-black">${formatValue(event.forecast_value)}</td>
+                <td class="px-4 py-3 text-sm text-black">${actualValue}</td>
                 <td class="px-4 py-3 text-sm">
                     <div class="flex items-center">
                         <span class="${sentimentClass}">${sentiment}</span>
@@ -602,12 +602,12 @@ function updateIndicatorsTable() {
                     </div>
                 </td>
                 <td class="px-4 py-3 text-sm">
-                    ${actualSentiment !== 'not released' ? `<span class="${actualSentimentClass}">${actualSentiment}</span>` : '<span class="text-gray-400">' + actualSentiment + '</span>'}
+                    ${actualSentiment !== 'not released' ? `<span class="${actualSentimentClass}">${actualSentiment}</span>` : '<span class="text-black">' + actualSentiment + '</span>'}
                 </td>
                 <td class="px-4 py-3 text-sm">
                     ${accuracy ? getAccuracyBadge(accuracy) : ''}
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-500">
+                <td class="px-4 py-3 text-sm text-black">
                     ${new Date(event.scheduled_datetime).toLocaleDateString()}
                 </td>
             </tr>
@@ -633,10 +633,10 @@ function updateWeeklySummary() {
             return `
                 <div class="bg-white rounded-lg shadow p-4 card-hover">
                     <div class="flex items-center justify-between mb-2">
-                        <span class="font-medium">${currency}</span>
+                        <span class="font-medium text-black">${currency}</span>
                         <span class="text-2xl">${getCurrencyFlag(currency)}</span>
                     </div>
-                    <div class="text-center text-gray-400">not released</div>
+                    <div class="text-center text-black">not released</div>
                 </div>
             `;
         }
@@ -662,12 +662,12 @@ function updateWeeklySummary() {
         return `
             <div class="bg-white rounded-lg shadow p-4 card-hover cursor-pointer" onclick="selectCurrency('${currency}')">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="font-medium">${currency}</span>
+                    <span class="font-medium text-black">${currency}</span>
                     <span class="text-2xl">${getCurrencyFlag(currency)}</span>
                 </div>
                 <div class="text-center">
                     <div class="text-lg font-bold ${sentimentClass}">${displaySentiment}</div>
-                    <div class="text-xs text-gray-500">${eventCount} events ${viewLabel}</div>
+                    <div class="text-xs text-black">${eventCount} events ${viewLabel}</div>
                     ${currentView === 'actual' && !actualAvailable ? 
                         '<div class="text-xs text-orange-500 mt-1">not released</div>' : ''}
                     ${currentView === 'comparison' && actualAvailable && sentiment.forecast_accuracy !== null ? 
@@ -1027,8 +1027,8 @@ function updateConfigurationDisplay(config) {
     configElement.innerHTML = config.map(item => `
         <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
             <div>
-                <h4 class="font-medium">${item.key}</h4>
-                <p class="text-sm text-gray-500">Last updated: ${new Date(item.updated_at).toLocaleDateString()}</p>
+                <h4 class="font-medium text-black">${item.key}</h4>
+                <p class="text-sm text-black">Last updated: ${new Date(item.updated_at).toLocaleDateString()}</p>
             </div>
             <div class="text-right">
                 <span class="text-sm font-mono bg-white px-2 py-1 rounded border">
